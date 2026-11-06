@@ -1,4 +1,5 @@
 import projectSettings from '../../studio-settings.json';
+import { drawMotionPreview } from './motion-preview.js';
 import { loadDataset } from './data.js';
 import { renderDesign, fullView, CATEGORICAL } from './render.js';
 import { separate, composite, film } from './separate.js';
@@ -11,6 +12,7 @@ const SETTINGS_KEY = 'surprise-machines.print-studio.settings.v1';
 const form = document.getElementById('controls');
 const statusEl = document.getElementById('status');
 const preview = document.getElementById('preview');
+const previewSnapshot = document.createElement('canvas');
 const viewGroup = document.getElementById('view');
 const exportBtn = document.getElementById('export');
 const loupe = document.getElementById('loupe');
@@ -24,6 +26,25 @@ let busy = false;
 let tool = 'move';
 let drag = null;
 let revision = 0;
+const previewWorker = new Worker(new URL('./preview-worker.js', import.meta.url), { type: 'module' });
+let workerRequest = null;
+previewWorker.onmessage = ({ data }) => {
+  if (!workerRequest || data.id !== workerRequest.id) return;
+  const pending = workerRequest;
+  workerRequest = null;
+  if (data.error) pending.reject(new Error(data.error));
+  else pending.resolve(data.layers);
+};
+previewWorker.onerror = (event) => {
+  if (workerRequest) workerRequest.reject(new Error(event.message));
+  workerRequest = null;
+};
+function renderPreview(p, view, id) {
+  return new Promise((resolve, reject) => {
+    workerRequest = { id, resolve, reject };
+    previewWorker.postMessage({ id, p, view });
+  });
+}
 let selectedView = 'composite';
 // Keep calibration independent of the current window or preview size.
 let referenceHeight = 900;
@@ -103,7 +124,10 @@ function restoreSettings() {
 }
 
 function syncZoom() {
-  zoomLevel.value = `${Math.round(Number(form.elements.zoom.value) * 100)}%`;
+  const zoom = form.elements.zoom;
+  zoomLevel.value = `${Math.round(Number(zoom.value) * 100)}%`;
+  document.getElementById('zoom-out').disabled = !ds || Number(zoom.value) <= Number(zoom.min);
+  document.getElementById('zoom-in').disabled = !ds || Number(zoom.value) >= Number(zoom.max);
 }
 function setTool(next) {
   tool = next;
@@ -125,12 +149,13 @@ function zoomMap(factor) {
   const after = Math.max(Number(el.zoom.min), Math.min(Number(el.zoom.max), Math.round(before * factor * 100) / 100));
   el.zoom.value = after;
   syncZoom();
-  schedule();
+  schedule(true);
 }
 function sheetPoint(event) {
-  const rect = preview.getBoundingClientRect();
+  const frame = preview.parentElement.getBoundingClientRect();
+  const width = preview.clientWidth, height = preview.clientHeight;
   const sheet = readParams().sheet;
-  return [(event.clientX - rect.left) / rect.width * sheet[0], (event.clientY - rect.top) / rect.height * sheet[1]];
+  return [(event.clientX - (frame.left + (frame.width - width) / 2)) / width * sheet[0], (event.clientY - (frame.top + (frame.height - height) / 2)) / height * sheet[1]];
 }
 
 const status = (msg) => { statusEl.textContent = msg; };
@@ -190,6 +215,8 @@ function populateViews(layers) {
   const current = selectedView;
   const options = ['composite', ...layers.map((L) => L.name)];
   selectedView = options.includes(current) ? current : 'composite';
+  const existing = Array.from(viewGroup.querySelectorAll('input')).map(input => input.value);
+  if (JSON.stringify(existing) === JSON.stringify(options)) return;
   const choices = options.map((value) => {
     const label = document.createElement('label');
     label.className = 'radio-option';
@@ -218,7 +245,16 @@ function drawPreview() {
   preview.width = view.w;
   preview.height = view.h;
   const ctx = preview.getContext('2d');
-  ctx.putImageData(viewImage(layers, p, view.w, view.h), 0, 0);
+  const image = viewImage(layers, p, view.w, view.h);
+  previewSnapshot.width = view.w;
+  previewSnapshot.height = view.h;
+  previewSnapshot.getContext('2d').putImageData(image, 0, 0);
+  ctx.drawImage(previewSnapshot, 0, 0);
+  drawLoupeOutline(p, view);
+}
+
+function drawLoupeOutline(p, view) {
+  const ctx = preview.getContext('2d');
   if (loupeCentre) {
     const k = view.dpi / 25.4;
     const side = (LOUPE_PX / p.dpi) * 25.4 * k;
@@ -231,22 +267,22 @@ function drawPreview() {
 async function update() {
   if (!ds) return;
   updateVisibility();
-  const request = ++revision;
+  const request = revision;
   const p = readParams();
-  const t0 = performance.now();
   status('Rendering preview…');
   await tick();
   const xy = await ds.layout(p.layout);
   if (request !== revision) return;
   const view = fullView(p, PREVIEW_DPI);
-  const layers = pipeline(xy, p, view, true);
+  const layers = await renderPreview(p, view, request);
+  if (request !== revision) return;
   last = { p, view, layers };
   populateViews(layers);
   drawPreview();
   if (loupeCentre) await renderLoupe();
   const exportPx = fullView(p, p.dpi);
   status(`${ds.n.toLocaleString()} images · ${layers.length} screen${layers.length > 1 ? 's' : ''} · `
-    + `export ${exportPx.w} × ${exportPx.h} px · preview ${Math.round(performance.now() - t0)} ms`);
+    + `export ${exportPx.w} × ${exportPx.h} px`);
 }
 
 async function renderLoupe() {
@@ -268,23 +304,48 @@ async function renderLoupe() {
 }
 
 let timer = null;
-function schedule() {
-  saveSettings();
-  if (timer !== null) return;
+let updating = false;
+let pendingUpdate = false;
+let motionFrame = null;
+function motionPreview() {
+  if (!last || motionFrame !== null) return;
+  motionFrame = requestAnimationFrame(() => {
+    motionFrame = null;
+    const p = readParams();
+    if (p.sheet.join() !== last.p.sheet.join()) return;
+    const background = last.layers.some(layer => layer.name === selectedView) ? '#ffffff' : last.p.paper;
+    drawMotionPreview(preview.getContext('2d'), previewSnapshot, last.p, p, background);
+    drawLoupeOutline(p, last.view);
+  });
+}
+async function flushPreview() {
+  if (updating) { pendingUpdate = true; return; }
+  updating = true;
+  pendingUpdate = false;
+  try { await update(); }
+  catch (err) { console.error(err); status(`Could not render preview: ${err.message}`); }
+  finally {
+    updating = false;
+    if (pendingUpdate) flushPreview();
+  }
+}
+function schedule(moving = false) {
+  revision++;
+  if (moving) motionPreview();
+  clearTimeout(timer);
   timer = setTimeout(() => {
     timer = null;
-    update().catch((err) => {
-      console.error(err);
-      status(`Could not render preview: ${err.message}`);
-    });
-  }, 80);
+    saveSettings();
+    flushPreview();
+  }, moving ? 120 : 0);
 }
+window.addEventListener('pagehide', saveSettings);
 
 form.addEventListener('input', (e) => {
   if (e.target.name === 'previewFilm') return;
   updateVisibility();
   syncZoom();
-  schedule();
+  schedule(e.target.name === 'zoom');
 });
 viewGroup.addEventListener('change', (event) => {
   selectedView = event.target.value;
@@ -320,7 +381,7 @@ preview.addEventListener('pointermove', (event) => {
   const point = sheetPoint(event);
   form.elements.offsetX.value = (drag.x + point[0] - drag.start[0]).toFixed(2);
   form.elements.offsetY.value = (drag.y + point[1] - drag.start[1]).toFixed(2);
-  schedule();
+  schedule(true);
 });
 function endDrag(event) {
   if (!drag || event.pointerId !== drag.id) return;
@@ -391,9 +452,13 @@ setTool(tool);
 loadDataset(status)
   .then(async (data) => {
     ds = data;
+    const positions = await ds.layout('umap');
+    const { n, meanCellArea, pointSizes, css, lum, cluster } = ds;
+    previewWorker.postMessage({ type: 'init', dataset: { n, meanCellArea, pointSizes, css, lum, cluster }, positions });
     await update();
     form.querySelectorAll('.panel-settings').forEach((settings) => { settings.disabled = false; });
     canvasButtons.forEach((button) => { button.disabled = false; });
+    syncZoom();
     exportBtn.disabled = false;
     document.getElementById('sheet').setAttribute('aria-busy', 'false');
   })

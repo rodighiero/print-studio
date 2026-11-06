@@ -13,9 +13,9 @@
       <h1><a class="brand" href="./">Surprise Machines <span>Print Studio</span></a></h1>
       <fieldset class="panel-settings" disabled>
       <fieldset>
-        <legend>Sheet</legend>
+        <legend>Composition</legend>
         <fieldset class="radio-group"><legend>Format</legend>
-          <div class="radio-options"><label class="radio-option"><input type="radio" name="sheet" value="420x594" checked> <span>A2</span></label>
+          <div class="radio-options compact"><label class="radio-option"><input type="radio" name="sheet" value="420x594" checked> <span>A2</span></label>
           <label class="radio-option"><input type="radio" name="sheet" value="297x420"> <span>A3</span></label></div>
         </fieldset>
         <label>Zoom <input type="range" name="zoom" min="1" max="2.5" step="0.01" value="1"></label>
@@ -25,10 +25,10 @@
 
 
       <fieldset>
-        <legend>Render</legend>
+        <legend>Appearance</legend>
         <fieldset class="radio-group"><legend>Colour by</legend>
-          <div class="radio-options"><label class="radio-option"><input type="radio" name="colorBy" value="image" checked> <span>Image colour</span></label>
-          <label class="radio-option"><input type="radio" name="colorBy" value="tone"> <span>Image tone (grey)</span></label>
+          <div class="radio-options compact"><label class="radio-option"><input type="radio" name="colorBy" value="image" checked> <span>Image colour</span></label>
+          <label class="radio-option"><input type="radio" name="colorBy" value="tone"> <span>Grey tone</span></label>
           <label class="radio-option"><input type="radio" name="colorBy" value="cluster"> <span>Cluster</span></label>
           <label class="radio-option"><input type="radio" name="colorBy" value="solid"> <span>Solid black</span></label></div>
         </fieldset>
@@ -64,13 +64,13 @@
 
     <aside id="panel-right" class="panel" aria-labelledby="output-title">
       <h2 id="output-title">Inks &amp; output</h2>
-      <p class="intro">Separate your design into screens and export print-ready films.</p>
+      <p class="intro">Colour separation &amp; print files</p>
       <fieldset class="panel-settings" disabled>
       <fieldset>
         <legend>Inks</legend>
         <div class="radio-options" role="radiogroup" aria-label="Ink separation"><label class="radio-option"><input type="radio" name="inkMode" value="mono" checked> <span>One colour</span></label>
           <label class="radio-option"><input type="radio" name="inkMode" value="spot"> <span>Spot colours</span></label>
-          <label class="radio-option"><input type="radio" name="inkMode" value="cmyk"> <span>CMYK process</span></label></div>
+          <label class="radio-option"><input type="radio" name="inkMode" value="cmyk"> <span>CMYK</span></label></div>
         <label data-show="inkMode=mono">Ink <input type="color" name="monoInk" value="#1a1a1a"></label>
         <label data-show="inkMode=spot">Number of inks <input type="number" name="inkCount" value="3" min="1" max="4" step="1"></label>
         <div class="swatches" data-show="inkMode=spot">
@@ -85,12 +85,12 @@
           <label class="radio-option"><input type="radio" name="spotMethod" value="dither"> <span>Dithered</span></label></div>
         </fieldset>
         <fieldset class="radio-group" data-show="inkMode=mono,cmyk"><legend>Screen</legend>
-          <div class="radio-options"><label class="radio-option"><input type="radio" name="screen" value="am" checked> <span>Halftone dots</span></label>
+          <div class="radio-options compact"><label class="radio-option"><input type="radio" name="screen" value="am" checked> <span>Halftone dots</span></label>
           <label class="radio-option"><input type="radio" name="screen" value="lines"> <span>Line screen</span></label>
-          <label class="radio-option"><input type="radio" name="screen" value="fs"> <span>Stochastic (error diffusion)</span></label>
+          <label class="radio-option"><input type="radio" name="screen" value="fs"> <span>Stochastic</span></label>
           <label class="radio-option"><input type="radio" name="screen" value="threshold"> <span>Threshold</span></label></div>
         </fieldset>
-        <label data-show="inkMode=mono,cmyk;screen=am,lines">LPI <input type="number" name="lpi" value="35" min="5" max="85" step="1"></label>
+        <label data-show="inkMode=mono,cmyk;screen=am,lines">Frequency (LPI) <input type="number" name="lpi" value="35" min="5" max="85" step="1"></label>
         <label data-show="inkMode=mono;screen=am,lines">Angle (°) <input type="number" name="angle" value="22.5" step="0.5"></label>
         <label data-show="inkMode=cmyk">Black generation <input type="range" name="gcr" min="0" max="1" step="0.05" value="1"></label>
       </fieldset>
@@ -100,14 +100,17 @@
         <fieldset class="radio-group" id="view"><legend>Preview</legend>
           <div class="radio-options"><label class="radio-option"><input type="radio" name="previewFilm" value="composite" checked> <span>Composite</span></label></div>
         </fieldset>
-        <fieldset class="radio-group"><legend>Export dpi</legend>
-          <div class="radio-options"><label class="radio-option"><input type="radio" name="dpi" value="300" checked> <span>300</span></label>
+        <fieldset class="radio-group"><legend>Resolution (dpi)</legend>
+          <div class="radio-options compact"><label class="radio-option"><input type="radio" name="dpi" value="300" checked> <span>300</span></label>
           <label class="radio-option"><input type="radio" name="dpi" value="400"> <span>400</span></label></div>
         </fieldset>
-        <button type="button" id="export" disabled>Export films (PNG)</button>
+
       </fieldset>
       </fieldset>
-      <p class="hint">Change the settings to update your print. Inspect a detail to see the actual screen at export resolution.</p>
+      <div class="export-footer">
+        <button type="button" id="export" disabled>Export films &amp; proof <span aria-hidden="true">↗</span></button>
+        <p class="hint">PNG · One film per ink + colour proof</p>
+      </div>
     </aside>
   </form>
   <script type="module" src="assets/print/app.js"></script>
