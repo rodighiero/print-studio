@@ -8,16 +8,9 @@
                 {
                     "n_neighbors": 15,
                     "min_dist": 0.01,
-                    "layout": "output/data/layouts/umap-3672bbfa-08a5-11ec-b4b1-3e22fb69e26f.json.gz",
-                    "jittered": "output/data/layouts/umap-jittered-3672bbfa-08a5-11ec-b4b1-3e22fb69e26f.json.gz"
+                    "layout": "output/data/layouts/umap-3672bbfa-08a5-11ec-b4b1-3e22fb69e26f.json.gz"
                 }
             ]
-        },
-        "alphabetic": {
-            "layout": "output/data/layouts/grid-3672bbfa-08a5-11ec-b4b1-3e22fb69e26f.json.gz"
-        },
-        "grid": {
-            "layout": "output/data/layouts/rasterfairy-3672bbfa-08a5-11ec-b4b1-3e22fb69e26f.json.gz"
         },
         "categorical": false,
         "date": false,

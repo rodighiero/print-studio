@@ -1,7 +1,8 @@
-// Turns the RGB design into ink layers (one per screen).
+// Turns the RGBA design into ink layers (one per screen).
 // A layer is { name, ink: [r,g,b], data: Uint8Array } where data is ink amount 0..255.
 // With simulate=true layers keep continuous coverage (for the small preview);
-// otherwise they are screened to pure 0/255 masks, ready to become films.
+// otherwise process/mono layers are screened to pure 0/255 masks. Flat spot
+// layers retain antialiased edge coverage for film export.
 
 import { hexToRgb } from './render.js';
 
@@ -23,13 +24,14 @@ export function separate(img, p, view, simulate) {
   if (p.inkMode === 'cmyk') {
     const ch = { C: new Uint8Array(n), M: new Uint8Array(n), Y: new Uint8Array(n), K: new Uint8Array(n) };
     for (let i = 0, o = 0; i < n; i++, o += 4) {
+      const alpha = data[o + 3] / 255;
       const c = 1 - data[o] / 255, m = 1 - data[o + 1] / 255, y = 1 - data[o + 2] / 255;
       const k = Math.min(c, m, y) * p.gcr;
       const d = 1 - k || 1;
-      ch.C[i] = 255 * (c - k) / d;
-      ch.M[i] = 255 * (m - k) / d;
-      ch.Y[i] = 255 * (y - k) / d;
-      ch.K[i] = 255 * k;
+      ch.C[i] = 255 * (c - k) / d * alpha;
+      ch.M[i] = 255 * (m - k) / d * alpha;
+      ch.Y[i] = 255 * (y - k) / d * alpha;
+      ch.K[i] = 255 * k * alpha;
     }
     return Object.keys(ch).map((key) => ({
       name: key,
@@ -41,7 +43,7 @@ export function separate(img, p, view, simulate) {
   // mono
   const cov = new Uint8Array(n);
   for (let i = 0, o = 0; i < n; i++, o += 4) {
-    cov[i] = 255 - (0.2126 * data[o] + 0.7152 * data[o + 1] + 0.0722 * data[o + 2]);
+    cov[i] = (255 - (0.2126 * data[o] + 0.7152 * data[o + 1] + 0.0722 * data[o + 2])) * data[o + 3] / 255;
   }
   return [{
     name: 'ink',
@@ -127,8 +129,9 @@ function nearest(r, g, b, inks) {
 
 function nearestToPalette(data, n, inks, masks) {
   for (let i = 0, o = 0; i < n; i++, o += 4) {
+    if (!data[o + 3]) continue;
     const j = nearest(data[o], data[o + 1], data[o + 2], inks);
-    if (j >= 0) masks[j][i] = 255;
+    if (j >= 0) masks[j][i] = data[o + 3];
   }
 }
 
@@ -138,7 +141,10 @@ function ditherToPalette(data, w, h, inks, masks) {
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x, o = i * 4, e0 = (x + 1) * 3;
-      const r = data[o] + cur[e0], g = data[o + 1] + cur[e0 + 1], b = data[o + 2] + cur[e0 + 2];
+      const alpha = data[o + 3] / 255;
+      const r = 255 + (data[o] - 255) * alpha + cur[e0];
+      const g = 255 + (data[o + 1] - 255) * alpha + cur[e0 + 1];
+      const b = 255 + (data[o + 2] - 255) * alpha + cur[e0 + 2];
       const j = nearest(r, g, b, inks);
       if (j >= 0) masks[j][i] = 255;
       const q = pal[j + 1];
@@ -152,45 +158,6 @@ function ditherToPalette(data, w, h, inks, masks) {
     }
     [cur, next] = [next, cur];
     next.fill(0);
-  }
-}
-
-/* ---------- registration marks (added to every layer) ---------- */
-
-export function addMarks(layers, p, view) {
-  const [W, H] = p.sheet;
-  const m = p.margin;
-  if (m < 8) return; // no room in the margin
-  const k = view.dpi / 25.4;
-  const R = Math.min(5, m / 2 - 1);
-  const size = Math.ceil(2 * R * k) + 2;
-  const c = new OffscreenCanvas(size, size);
-  const ctx = c.getContext('2d', { willReadFrequently: true });
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = Math.max(1, 0.25 * k);
-  ctx.beginPath();
-  ctx.arc(size / 2, size / 2, R * 0.6 * k, 0, Math.PI * 2);
-  ctx.moveTo(1, size / 2); ctx.lineTo(size - 1, size / 2);
-  ctx.moveTo(size / 2, 1); ctx.lineTo(size / 2, size - 1);
-  ctx.stroke();
-  const alpha = ctx.getImageData(0, 0, size, size).data;
-
-  const centres = [[W / 2, m / 2], [W / 2, H - m / 2], [m / 2, H / 2], [W - m / 2, H / 2]];
-  for (const [cx, cy] of centres) {
-    const ox = Math.round(cx * k - view.x0 - size / 2);
-    const oy = Math.round(cy * k - view.y0 - size / 2);
-    for (let y = 0; y < size; y++) {
-      const vy = oy + y;
-      if (vy < 0 || vy >= view.h) continue;
-      for (let x = 0; x < size; x++) {
-        const vx = ox + x;
-        if (vx < 0 || vx >= view.w) continue;
-        const a = alpha[(y * size + x) * 4 + 3];
-        if (!a) continue;
-        const i = vy * view.w + vx;
-        for (const L of layers) L.data[i] = Math.max(L.data[i], a > 127 ? 255 : a);
-      }
-    }
   }
 }
 

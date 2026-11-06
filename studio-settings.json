@@ -1,0 +1,31 @@
+{
+  "values": {
+    "sheet": "420x594",
+    "zoom": "1",
+    "offsetX": "0",
+    "offsetY": "0",
+    "render": "dots",
+    "colorBy": "image",
+    "sizeBy": "constant",
+    "inkMode": "mono",
+    "monoInk": "#1a1a1a",
+    "inkCount": "3",
+    "spot1": "#e4572e",
+    "spot2": "#1b4f9c",
+    "spot3": "#f2a541",
+    "spot4": "#1a1a1a",
+    "paper": "#f4f0e6",
+    "spotMethod": "flat",
+    "screen": "am",
+    "lpi": "35",
+    "angle": "22.5",
+    "gcr": "1",
+    "dpi": "300"
+  },
+  "referenceHeight": 949,
+  "referencePixelRatio": 2,
+  "view": "composite",
+  "tool": "move",
+  "positionVersion": 2,
+  "zoomRangeVersion": 1
+}

@@ -37,14 +37,14 @@ export async function loadDataset(status = () => {}) {
   const sx = new Float32Array(n);
   const sy = new Float32Array(n);
   const sw = new Float32Array(n);
-  const aspect = new Float32Array(n);
+  let totalCellArea = 0;
   for (let a = 0, k = 0; a < sizes.length; a++) {
     for (let j = 0; j < sizes[a].length; j++, k++) {
       const [w, h] = sizes[a][j];
       atlasIdx[k] = a;
       sx[k] = positions[a][j][0];
       sy[k] = positions[a][j][1];
-      aspect[k] = w / h;
+      totalCellArea += w * h;
       sw[k] = (w / h) * cellPx;
     }
   }
@@ -93,9 +93,6 @@ export async function loadDataset(status = () => {}) {
   const umap = manifest.layouts.umap.variants[0];
   const layoutPaths = {
     umap: umap.layout,
-    'umap-jittered': umap.jittered,
-    grid: manifest.layouts.grid && manifest.layouts.grid.layout,
-    alphabetic: manifest.layouts.alphabetic && manifest.layouts.alphabetic.layout,
   };
   const layoutCache = new Map();
   async function layout(name) {
@@ -109,7 +106,9 @@ export async function loadDataset(status = () => {}) {
   }
 
   return {
-    n, cellPx, atlases, atlasIdx, sx, sy, sw, aspect,
+    n,
+    meanCellArea: totalCellArea / n,
+    pointSizes: manifest.point_sizes,
     color, lum, css, cluster, clusterLabels, layout,
     names: imagelist.images,
   };

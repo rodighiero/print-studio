@@ -1,15 +1,17 @@
+import projectSettings from '../../studio-settings.json';
 import { loadDataset } from './data.js';
 import { renderDesign, fullView, CATEGORICAL } from './render.js';
-import { separate, addMarks, composite, film } from './separate.js';
+import { separate, composite, film } from './separate.js';
 import { imageDataToPng, download } from './export.js';
 
 const PREVIEW_DPI = 60;
 const LOUPE_PX = 600;
+const SETTINGS_KEY = 'surprise-machines.print-studio.settings.v1';
 
 const form = document.getElementById('controls');
 const statusEl = document.getElementById('status');
 const preview = document.getElementById('preview');
-const viewSelect = document.getElementById('view');
+const viewGroup = document.getElementById('view');
 const exportBtn = document.getElementById('export');
 const loupe = document.getElementById('loupe');
 const loupeCanvas = loupe.querySelector('canvas');
@@ -19,6 +21,117 @@ let ds = null;
 let last = null;        // { p, view, layers } of the current preview
 let loupeCentre = null; // [xMm, yMm]
 let busy = false;
+let tool = 'move';
+let drag = null;
+let revision = 0;
+let selectedView = 'composite';
+// Keep calibration independent of the current window or preview size.
+let referenceHeight = 900;
+let referencePixelRatio = window.devicePixelRatio || 1;
+const toolButtons = ['move', 'inspect'].map((id) => document.getElementById(id));
+const canvasButtons = document.querySelectorAll('.toolbar button');
+canvasButtons.forEach((button) => { button.disabled = true; });
+const zoomLevel = document.getElementById('zoom-level');
+
+// Store raw control values so hidden inks and checkbox state survive a refresh.
+function settingControls() {
+  return Array.from(form.elements).filter((el) => el.name && el.name !== 'previewFilm' && ['INPUT', 'OUTPUT'].includes(el.tagName));
+}
+function saveSettings() {
+  try {
+    const values = Object.fromEntries(settingControls().filter((el) => el.type !== 'radio' || el.checked).map((el) => [el.name, el.type === 'checkbox' ? el.checked : el.value]));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ values, referenceHeight, referencePixelRatio, view: selectedView, tool, positionVersion: 2, zoomRangeVersion: 1 }));
+  } catch {
+    // Saving is optional when browser storage is unavailable.
+  }
+}
+function applySettings(saved) {
+  try {
+    if (!saved || typeof saved.values !== 'object' || !saved.values) return;
+    for (const el of settingControls()) {
+      const value = saved.values[el.name];
+      if (el.type === 'radio') {
+        const valid = Array.from(form.elements).some((option) => option.type === 'radio' && option.name === el.name && option.value === value);
+        if (valid) el.checked = el.value === value;
+        continue;
+      }
+      if (el.type === 'checkbox') {
+        if (typeof value === 'boolean') el.checked = value;
+        continue;
+      }
+      if (typeof value !== 'string') continue;
+      if (el.type === 'number' || el.type === 'range' || el.tagName === 'OUTPUT') {
+        const n = Number(value);
+        if (!value.trim() || !Number.isFinite(n)) continue;
+        if ((el.min !== '' && n < Number(el.min)) || (el.max !== '' && n > Number(el.max))) continue;
+      }
+      if (el.type === 'color' && !/^#[0-9a-f]{6}$/i.test(value)) continue;
+      el.value = value;
+    }
+    // Preserve previous calibration when migrating from the removed control.
+    const storedHeight = Number(saved.referenceHeight ?? saved.values.referenceHeight);
+    if (Number.isFinite(storedHeight) && storedHeight >= 100 && storedHeight <= 10000) {
+      referenceHeight = storedHeight;
+    }
+    const storedRatio = Number(saved.referencePixelRatio);
+    if (Number.isFinite(storedRatio) && storedRatio >= 0.5 && storedRatio <= 8) {
+      referencePixelRatio = storedRatio;
+    }
+    // Re-centre older saved positions on the original app camera target once.
+    // Later saves retain manual positioning across refreshes.
+    if (saved.positionVersion !== 2) {
+      form.elements.offsetX.value = '0';
+      form.elements.offsetY.value = '0';
+    }
+    // Start the revised zoom range at 100% once; retain later user choices.
+    if (saved.zoomRangeVersion !== 1) form.elements.zoom.value = '1';
+    if (typeof saved.view === 'string') selectedView = saved.view;
+    if (saved.tool === 'move' || saved.tool === 'inspect') tool = saved.tool;
+    if (saved.positionVersion !== 2 || saved.zoomRangeVersion !== 1) saveSettings();
+  } catch {
+    // Missing, outdated or unavailable storage must never prevent startup.
+  }
+}
+
+function restoreSettings() {
+  applySettings(projectSettings);
+  try {
+    applySettings(JSON.parse(localStorage.getItem(SETTINGS_KEY)));
+  } catch {
+    // Project defaults still work when local storage is unavailable or corrupt.
+  }
+}
+
+function syncZoom() {
+  zoomLevel.value = `${Math.round(Number(form.elements.zoom.value) * 100)}%`;
+}
+function setTool(next) {
+  tool = next;
+  preview.dataset.tool = next;
+  toolButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.id === next)));
+  document.getElementById('canvas-hint').textContent = next === 'move'
+    ? 'Drag to position the map · Scroll to zoom'
+    : 'Click the sheet to inspect the screen · Escape to close · M to move';
+}
+function closeLoupe() {
+  loupeCentre = null;
+  loupe.hidden = true;
+  drawPreview();
+}
+function zoomMap(factor) {
+  if (!ds) return;
+  const el = form.elements;
+  const before = Number(el.zoom.value);
+  const after = Math.max(Number(el.zoom.min), Math.min(Number(el.zoom.max), Math.round(before * factor * 100) / 100));
+  el.zoom.value = after;
+  syncZoom();
+  schedule();
+}
+function sheetPoint(event) {
+  const rect = preview.getBoundingClientRect();
+  const sheet = readParams().sheet;
+  return [(event.clientX - rect.left) / rect.width * sheet[0], (event.clientY - rect.top) / rect.height * sheet[1]];
+}
 
 const status = (msg) => { statusEl.textContent = msg; };
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -31,21 +144,15 @@ function readParams() {
   const inks = inkMode === 'spot' ? spots : [el.monoInk.value];
   return {
     sheet: el.sheet.value.split('x').map(Number),
-    margin: num('margin'),
     zoom: num('zoom'),
     offsetX: num('offsetX') || 0,
     offsetY: num('offsetY') || 0,
-    caption: el.caption.value.trim(),
-    captionSize: num('captionSize'),
-    marks: el.marks.checked,
-    layout: el.layout.value,
-    render: el.render.value,
-    size: num('size'),
+    layout: 'umap',
+    render: 'dots',
+    referenceHeight,
+    referencePixelRatio,
     colorBy: el.colorBy.value,
     sizeBy: el.sizeBy.value,
-    blur: num('blur'),
-    gamma: num('gamma'),
-    bands: num('bands') | 0,
     inkMode,
     inks,
     paper: el.paper.value,
@@ -76,21 +183,31 @@ function updateVisibility() {
 function pipeline(xy, p, view, simulate) {
   const img = renderDesign(ds, xy, p, view, p.palette);
   const layers = separate(img, p, view, simulate);
-  if (p.marks) addMarks(layers, p, view);
   return layers;
 }
 
 function populateViews(layers) {
-  const current = viewSelect.value;
+  const current = selectedView;
   const options = ['composite', ...layers.map((L) => L.name)];
-  viewSelect.innerHTML = options
-    .map((o) => `<option value="${o}">${o === 'composite' ? 'Composite' : `Film: ${o}`}</option>`)
-    .join('');
-  viewSelect.value = options.includes(current) ? current : 'composite';
+  selectedView = options.includes(current) ? current : 'composite';
+  const choices = options.map((value) => {
+    const label = document.createElement('label');
+    label.className = 'radio-option';
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'previewFilm';
+    input.value = value;
+    input.checked = value === selectedView;
+    const text = document.createElement('span');
+    text.textContent = value === 'composite' ? 'Composite' : `Film: ${value}`;
+    label.append(input, text);
+    return label;
+  });
+  viewGroup.querySelector('.radio-options').replaceChildren(...choices);
 }
 
 function viewImage(layers, p, w, h) {
-  const which = viewSelect.value;
+  const which = selectedView;
   const layer = layers.find((L) => L.name === which);
   return layer ? film(layer, w, h) : composite(layers, p.paper, w, h);
 }
@@ -114,17 +231,19 @@ function drawPreview() {
 async function update() {
   if (!ds) return;
   updateVisibility();
+  const request = ++revision;
   const p = readParams();
   const t0 = performance.now();
   status('Rendering preview…');
   await tick();
   const xy = await ds.layout(p.layout);
+  if (request !== revision) return;
   const view = fullView(p, PREVIEW_DPI);
   const layers = pipeline(xy, p, view, true);
   last = { p, view, layers };
   populateViews(layers);
   drawPreview();
-  if (loupeCentre) renderLoupe();
+  if (loupeCentre) await renderLoupe();
   const exportPx = fullView(p, p.dpi);
   status(`${ds.n.toLocaleString()} images · ${layers.length} screen${layers.length > 1 ? 's' : ''} · `
     + `export ${exportPx.w} × ${exportPx.h} px · preview ${Math.round(performance.now() - t0)} ms`);
@@ -150,34 +269,88 @@ async function renderLoupe() {
 
 let timer = null;
 function schedule() {
-  clearTimeout(timer);
-  timer = setTimeout(update, 200);
+  saveSettings();
+  if (timer !== null) return;
+  timer = setTimeout(() => {
+    timer = null;
+    update().catch((err) => {
+      console.error(err);
+      status(`Could not render preview: ${err.message}`);
+    });
+  }, 80);
 }
 
 form.addEventListener('input', (e) => {
-  if (e.target === viewSelect) return;
+  if (e.target.name === 'previewFilm') return;
   updateVisibility();
+  syncZoom();
   schedule();
 });
-viewSelect.addEventListener('change', () => {
+viewGroup.addEventListener('change', (event) => {
+  selectedView = event.target.value;
+  saveSettings();
   drawPreview();
   if (loupeCentre) renderLoupe();
 });
 
-preview.addEventListener('click', (e) => {
-  if (!last) return;
-  const rect = preview.getBoundingClientRect();
-  const xMm = ((e.clientX - rect.left) / rect.width) * last.p.sheet[0];
-  const yMm = ((e.clientY - rect.top) / rect.height) * last.p.sheet[1];
-  loupeCentre = [xMm, yMm];
-  drawPreview();
-  renderLoupe();
+toolButtons.forEach((button) => button.addEventListener('click', () => {
+  setTool(button.id);
+  saveSettings();
+}));
+document.getElementById('close-loupe').addEventListener('click', closeLoupe);
+document.getElementById('zoom-in').addEventListener('click', () => zoomMap(1.1));
+document.getElementById('zoom-out').addEventListener('click', () => zoomMap(1 / 1.1));
+form.addEventListener('submit', (event) => event.preventDefault());
+
+preview.addEventListener('pointerdown', (event) => {
+  if (!last || event.button !== 0) return;
+  preview.focus({ preventScroll: true });
+  if (tool === 'inspect') {
+    loupeCentre = sheetPoint(event);
+    drawPreview();
+    renderLoupe();
+    return;
+  }
+  drag = { id: event.pointerId, start: sheetPoint(event), x: Number(form.elements.offsetX.value), y: Number(form.elements.offsetY.value) };
+  preview.setPointerCapture(event.pointerId);
+  preview.classList.add('dragging');
 });
-document.getElementById('sheet').addEventListener('click', (e) => {
-  if (e.target === preview) return;
-  loupeCentre = null;
-  loupe.hidden = true;
-  drawPreview();
+preview.addEventListener('pointermove', (event) => {
+  if (!drag || event.pointerId !== drag.id) return;
+  const point = sheetPoint(event);
+  form.elements.offsetX.value = (drag.x + point[0] - drag.start[0]).toFixed(2);
+  form.elements.offsetY.value = (drag.y + point[1] - drag.start[1]).toFixed(2);
+  schedule();
+});
+function endDrag(event) {
+  if (!drag || event.pointerId !== drag.id) return;
+  drag = null;
+  preview.classList.remove('dragging');
+  schedule();
+}
+preview.addEventListener('pointerup', endDrag);
+preview.addEventListener('pointercancel', endDrag);
+preview.addEventListener('lostpointercapture', endDrag);
+preview.addEventListener('wheel', (event) => {
+  if (!last || event.ctrlKey) return;
+  event.preventDefault();
+  zoomMap(Math.exp(-Math.max(-100, Math.min(100, event.deltaY)) * 0.002));
+}, { passive: false });
+preview.addEventListener('keydown', (event) => {
+  if (!last) return;
+  if (event.key === '+' || event.key === '=') { event.preventDefault(); zoomMap(1.1); }
+  else if (event.key === '-') { event.preventDefault(); zoomMap(1 / 1.1); }
+  else if (event.key.toLowerCase() === 'm') { setTool('move'); saveSettings(); }
+  else if (event.key.toLowerCase() === 'i') { setTool('inspect'); saveSettings(); }
+  else if (event.key === 'Enter' && tool === 'inspect') {
+    loupeCentre = readParams().sheet.map((mm) => mm / 2);
+    drawPreview();
+    renderLoupe();
+  }
+});
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeLoupe(); });
+document.getElementById('sheet').addEventListener('click', (event) => {
+  if (event.target !== preview) closeLoupe();
 });
 
 exportBtn.addEventListener('click', async () => {
@@ -210,10 +383,21 @@ exportBtn.addEventListener('click', async () => {
   }
 });
 
+restoreSettings();
+saveSettings();
 updateVisibility();
+syncZoom();
+setTool(tool);
 loadDataset(status)
-  .then((data) => { ds = data; return update(); })
+  .then(async (data) => {
+    ds = data;
+    await update();
+    form.querySelectorAll('.panel-settings').forEach((settings) => { settings.disabled = false; });
+    canvasButtons.forEach((button) => { button.disabled = false; });
+    exportBtn.disabled = false;
+    document.getElementById('sheet').setAttribute('aria-busy', 'false');
+  })
   .catch((err) => {
     console.error(err);
-    status(`Could not load data/: ${err.message}. Serve the repo root over HTTP (python3 -m http.server).`);
+    status(`Could not load data/: ${err.message}. Check the connection and reload the page.`);
   });
