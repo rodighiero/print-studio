@@ -1,0 +1,125 @@
+:root {
+  --bg: #e9e7e2;
+  --panel: #fbfaf7;
+  --ink: #1d1d1b;
+  --muted: #6b6a66;
+  --line: #d8d5ce;
+  --accent: #e4572e;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font: 13px/1.4 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+body { display: flex; }
+
+#panel {
+  width: 300px;
+  flex: none;
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+}
+
+h1 { font-size: 16px; margin: 0 0 4px; }
+
+#status { color: var(--muted); margin: 0 0 12px; min-height: 1.4em; }
+
+fieldset {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 0;
+  padding: 10px 0 12px;
+  display: grid;
+  gap: 8px;
+}
+
+legend {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 0 0 4px;
+}
+
+label { display: grid; gap: 3px; }
+label.inline { display: flex; align-items: center; gap: 6px; }
+
+input[type="number"], input[type="text"], select {
+  width: 100%;
+  padding: 4px 6px;
+  font: inherit;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+}
+
+input[type="range"] { width: 100%; }
+input[type="color"] { width: 44px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 4px; }
+
+.swatches { display: flex; gap: 6px; }
+
+button {
+  font: inherit;
+  font-weight: 600;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 4px;
+  color: #fff;
+  background: var(--ink);
+  cursor: pointer;
+}
+button:disabled { opacity: 0.5; cursor: progress; }
+
+.hint { color: var(--muted); font-size: 12px; }
+
+[hidden] { display: none !important; }
+
+main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+#sheet { height: 100%; width: 100%; display: flex; align-items: center; justify-content: center; }
+
+#preview {
+  max-width: 100%;
+  max-height: 100%;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.18);
+  cursor: crosshair;
+  background: #fff;
+}
+
+#loupe {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  margin: 0;
+  width: 300px;
+  background: #fff;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.25);
+}
+#loupe canvas { display: block; width: 300px; height: 300px; }
+#loupe figcaption { padding: 4px 8px; font-size: 11px; color: var(--muted); }
+
+@media (max-width: 760px) {
+  body { flex-direction: column; }
+  #panel { width: 100%; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  main { min-height: 70vh; padding: 16px; }
+  #loupe { width: 200px; }
+  #loupe canvas { width: 200px; height: 200px; }
+}

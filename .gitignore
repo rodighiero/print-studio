@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts (PixPlot pipeline outputs not needed for the viewer)
+data/originals/
+data/image-vectors/
+node_modules/
+
+# Logs
+*.log
+
+# Vite
+/dist/
