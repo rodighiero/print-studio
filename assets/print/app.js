@@ -1,9 +1,9 @@
 import projectSettings from '../../studio-settings.json';
 import { drawMotionPreview } from './motion-preview.js';
 import { loadDataset } from './data.js';
-import { renderDesign, fullView, CATEGORICAL } from './render.js';
+import { renderDesign, fullView, filmView, CATEGORICAL } from './render.js';
 import { separate, composite, film } from './separate.js';
-import { imageDataToPng, download } from './export.js';
+import { renderFilms, chooseSaver } from './export.js';
 
 const PREVIEW_DPI = 60;
 const LOUPE_PX = 600;
@@ -18,50 +18,93 @@ const exportBtn = document.getElementById('export');
 const loupe = document.getElementById('loupe');
 const loupeCanvas = loupe.querySelector('canvas');
 const loupeCaption = loupe.querySelector('figcaption');
+const areaToggle = document.getElementById('toggle-area');
 
 let ds = null;
 let last = null;        // { p, view, layers } of the current preview
-let loupeCentre = null; // [xMm, yMm]
+let loupeCentre = [0.5, 0.5]; // selected center as fractions of sheet width/height
+let areaVisible = true;
 let busy = false;
 let tool = 'move';
 let drag = null;
 let revision = 0;
-const previewWorker = new Worker(new URL('./preview-worker.js', import.meta.url), { type: 'module' });
-let workerRequest = null;
-previewWorker.onmessage = ({ data }) => {
-  if (!workerRequest || data.id !== workerRequest.id) return;
-  const pending = workerRequest;
-  workerRequest = null;
-  if (data.error) pending.reject(new Error(data.error));
-  else pending.resolve(data.layers);
-};
-previewWorker.onerror = (event) => {
-  if (workerRequest) workerRequest.reject(new Error(event.message));
-  workerRequest = null;
-};
-function renderPreview(p, view, id) {
-  return new Promise((resolve, reject) => {
-    workerRequest = { id, resolve, reject };
-    previewWorker.postMessage({ id, p, view });
-  });
+// One worker keeps the preview responsive; a second renders exports so the
+// preview and UI stay usable meanwhile. If a worker cannot load or crashes,
+// it is marked broken and the same work runs on the main thread instead.
+function workerClient() {
+  let worker = null, broken = null, pending = null;
+  const fail = (error) => {
+    broken = error;
+    if (pending) pending.reject(error);
+    pending = null;
+  };
+  try { worker = new Worker(new URL('./preview-worker.js', import.meta.url), { type: 'module' }); }
+  catch (error) { broken = error; }
+  if (worker) {
+    worker.onmessage = ({ data }) => {
+      if (!pending || data.id !== pending.id) return;
+      if (data.progress) { pending.progress?.(data.progress); return; }
+      if (data.file) { pending.file?.(data.file); return; }
+      const settled = pending;
+      pending = null;
+      if (data.error) settled.reject(new Error(data.error));
+      else settled.resolve(data.preview ?? data.layers ?? data.done);
+    };
+    worker.onerror = (event) => {
+      event.preventDefault();
+      fail(new Error(event.message || 'Render worker failed to load'));
+    };
+    worker.onmessageerror = () => fail(new Error('Render worker message could not be read'));
+  }
+  return {
+    get ok() { return !broken; },
+    init(message) { if (!broken) worker.postMessage(message); },
+    // Requests are serialized by the caller (one in flight per worker).
+    request(message, handlers = {}) {
+      if (broken) return Promise.reject(broken);
+      return new Promise((resolve, reject) => {
+        pending = { id: message.id, resolve, reject, ...handlers };
+        worker.postMessage(message);
+      });
+    },
+  };
+}
+const previewWorker = workerClient();
+const exportWorker = workerClient();
+async function renderPreview(xy, p, view, id) {
+  try {
+    if (previewWorker.ok) return await previewWorker.request({ id, p, view });
+  } catch (error) {
+    if (previewWorker.ok) throw error; // a render error, not a worker failure
+    console.warn('Preview worker unavailable, rendering on the main thread.', error);
+  }
+  const design = renderDesign(ds, xy, p, view, p.palette);
+  return { design, layers: separate(design, p, view, true) };
 }
 let selectedView = 'composite';
 // Keep calibration independent of the current window or preview size.
 let referenceHeight = 900;
 let referencePixelRatio = window.devicePixelRatio || 1;
 const toolButtons = ['move', 'inspect'].map((id) => document.getElementById(id));
-const canvasButtons = document.querySelectorAll('.toolbar button');
-canvasButtons.forEach((button) => { button.disabled = true; });
 const zoomLevel = document.getElementById('zoom-level');
 
 // Store raw control values so hidden inks and checkbox state survive a refresh.
 function settingControls() {
-  return Array.from(form.elements).filter((el) => el.name && el.name !== 'previewFilm' && ['INPUT', 'OUTPUT'].includes(el.tagName));
+  return Array.from(form.elements).filter((el) => el.name && el.name !== 'previewFilm' && ['INPUT', 'OUTPUT', 'SELECT'].includes(el.tagName));
 }
 function saveSettings() {
   try {
-    const values = Object.fromEntries(settingControls().filter((el) => el.type !== 'radio' || el.checked).map((el) => [el.name, el.type === 'checkbox' ? el.checked : el.value]));
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ values, referenceHeight, referencePixelRatio, view: selectedView, tool, positionVersion: 2, zoomRangeVersion: 1 }));
+    // Store only what differs from studio-settings.json, so later changes to
+    // the committed defaults still reach returning visitors for untouched values.
+    const defaults = projectSettings.values ?? {};
+    const values = Object.fromEntries(settingControls()
+      .filter((el) => el.type !== 'radio' || el.checked)
+      .map((el) => [el.name, el.type === 'checkbox' ? el.checked : el.value])
+      .filter(([name, value]) => String(value) !== String(defaults[name])));
+    const calibration = {};
+    if (referenceHeight !== projectSettings.referenceHeight) calibration.referenceHeight = referenceHeight;
+    if (referencePixelRatio !== projectSettings.referencePixelRatio) calibration.referencePixelRatio = referencePixelRatio;
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ values, ...calibration, view: selectedView, tool, areaVisible, positionVersion: 2, zoomRangeVersion: 2 }));
   } catch {
     // Saving is optional when browser storage is unavailable.
   }
@@ -70,7 +113,8 @@ function applySettings(saved) {
   try {
     if (!saved || typeof saved.values !== 'object' || !saved.values) return;
     for (const el of settingControls()) {
-      const value = saved.values[el.name];
+      const stored = saved.values[el.name];
+      const value = el.name === 'colorBy' && stored === 'cluster' ? 'image' : stored;
       if (el.type === 'radio') {
         const valid = Array.from(form.elements).some((option) => option.type === 'radio' && option.name === el.name && option.value === value);
         if (valid) el.checked = el.value === value;
@@ -98,17 +142,18 @@ function applySettings(saved) {
     if (Number.isFinite(storedRatio) && storedRatio >= 0.5 && storedRatio <= 8) {
       referencePixelRatio = storedRatio;
     }
-    // Re-centre older saved positions on the original app camera target once.
+    // Re-center older saved positions on the original app camera target once.
     // Later saves retain manual positioning across refreshes.
     if (saved.positionVersion !== 2) {
       form.elements.offsetX.value = '0';
       form.elements.offsetY.value = '0';
     }
-    // Start the revised zoom range at 100% once; retain later user choices.
-    if (saved.zoomRangeVersion !== 1) form.elements.zoom.value = '1';
+    // Move older saves to the current default zoom once; retain later user choices.
+    if (saved.zoomRangeVersion !== 2) form.elements.zoom.value = projectSettings.values.zoom;
     if (typeof saved.view === 'string') selectedView = saved.view;
     if (saved.tool === 'move' || saved.tool === 'inspect') tool = saved.tool;
-    if (saved.positionVersion !== 2 || saved.zoomRangeVersion !== 1) saveSettings();
+    if (typeof saved.areaVisible === 'boolean') areaVisible = saved.areaVisible;
+    if (saved.positionVersion !== 2 || saved.zoomRangeVersion !== 2) saveSettings();
   } catch {
     // Missing, outdated or unavailable storage must never prevent startup.
   }
@@ -129,28 +174,44 @@ function syncZoom() {
   document.getElementById('zoom-out').disabled = !ds || Number(zoom.value) <= Number(zoom.min);
   document.getElementById('zoom-in').disabled = !ds || Number(zoom.value) >= Number(zoom.max);
 }
-function setTool(next) {
+function setTool(next, revealArea = true) {
   tool = next;
   preview.dataset.tool = next;
   toolButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.id === next)));
-  document.getElementById('canvas-hint').textContent = next === 'move'
-    ? 'Drag to position the map · Scroll to zoom'
-    : 'Click the sheet to inspect the screen · Escape to close · M to move';
+  if (next === 'inspect' && revealArea) setAreaVisible(true);
 }
-function closeLoupe() {
-  loupeCentre = null;
-  loupe.hidden = true;
+function setAreaVisible(visible) {
+  areaVisible = visible;
+  areaToggle.textContent = visible ? 'Hide area' : 'Show area';
+  areaToggle.setAttribute('aria-pressed', String(visible));
   drawPreview();
 }
+areaToggle.addEventListener('click', () => {
+  setAreaVisible(!areaVisible);
+  saveSettings();
+});
 function zoomMap(factor) {
   if (!ds) return;
   const el = form.elements;
   const before = Number(el.zoom.value);
-  const after = Math.max(Number(el.zoom.min), Math.min(Number(el.zoom.max), Math.round(before * factor * 100) / 100));
+  // No per-step rounding: small trackpad deltas must accumulate.
+  const after = Math.max(Number(el.zoom.min), Math.min(Number(el.zoom.max), before * factor));
+  if (after === before) return;
   el.zoom.value = after;
   syncZoom();
   schedule(true);
 }
+// Offsets are 0 when the sheet is centered on the original camera target.
+const resetPositionBtn = document.getElementById('reset-position');
+function syncPosition() {
+  resetPositionBtn.disabled = Number(form.elements.offsetX.value) === 0 && Number(form.elements.offsetY.value) === 0;
+}
+resetPositionBtn.addEventListener('click', () => {
+  form.elements.offsetX.value = '0';
+  form.elements.offsetY.value = '0';
+  syncPosition();
+  schedule(true);
+});
 function sheetPoint(event) {
   const frame = preview.parentElement.getBoundingClientRect();
   const width = preview.clientWidth, height = preview.clientHeight;
@@ -159,6 +220,8 @@ function sheetPoint(event) {
 }
 
 const status = (msg) => { statusEl.textContent = msg; };
+// Empty or out-of-range typed values would blank (NaN) or flood (0) every screened film.
+const clampNum = (v, min, max, fallback) => (Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function readParams() {
@@ -177,23 +240,24 @@ function readParams() {
     referenceHeight,
     referencePixelRatio,
     colorBy: el.colorBy.value,
-    sizeBy: el.sizeBy.value,
+    sizeBy: 'constant',
     inkMode,
     inks,
     paper: el.paper.value,
     spotMethod: el.spotMethod.value,
     screen: el.screen.value,
-    lpi: num('lpi'),
-    angle: num('angle'),
+    lpi: clampNum(num('lpi'), 5, 85, 35),
+    angle: Number.isFinite(num('angle')) ? num('angle') : 22.5,
     gcr: num('gcr'),
     dpi: num('dpi'),
-    // cluster colours follow the inks when printing spot colours
+    // cluster colors follow the inks when printing spot colors
     palette: inkMode === 'spot' ? spots : CATEGORICAL,
   };
 }
 
 // data-show="inkMode=mono,cmyk;screen=am,lines" -> visible when every clause matches
 function updateVisibility() {
+  viewGroup.hidden = !form.elements.printPreview.checked;
   form.querySelectorAll('[data-show]').forEach((node) => {
     const ok = node.dataset.show.split(';').every((clause) => {
       const [name, values] = clause.split('=');
@@ -226,11 +290,11 @@ function populateViews(layers) {
     input.value = value;
     input.checked = value === selectedView;
     const text = document.createElement('span');
-    text.textContent = value === 'composite' ? 'Composite' : `Film: ${value}`;
+    text.textContent = value === 'composite' ? 'Composite' : `Film ${value}`;
     label.append(input, text);
     return label;
   });
-  viewGroup.querySelector('.radio-options').replaceChildren(...choices);
+  viewGroup.querySelector('.options').replaceChildren(...choices);
 }
 
 function viewImage(layers, p, w, h) {
@@ -241,26 +305,38 @@ function viewImage(layers, p, w, h) {
 
 function drawPreview() {
   if (!last) return;
-  const { p, view, layers } = last;
+  const { p, view, layers, design } = last;
+  const printPreview = form.elements.printPreview.checked;
   preview.width = view.w;
   preview.height = view.h;
   const ctx = preview.getContext('2d');
-  const image = viewImage(layers, p, view.w, view.h);
+  const image = printPreview ? viewImage(layers, p, view.w, view.h) : design;
   previewSnapshot.width = view.w;
   previewSnapshot.height = view.h;
-  previewSnapshot.getContext('2d').putImageData(image, 0, 0);
+  const snapshotCtx = previewSnapshot.getContext('2d');
+  snapshotCtx.putImageData(image, 0, 0);
+  if (!printPreview) {
+    snapshotCtx.globalCompositeOperation = 'destination-over';
+    snapshotCtx.fillStyle = p.paper;
+    snapshotCtx.fillRect(0, 0, view.w, view.h);
+    snapshotCtx.globalCompositeOperation = 'source-over';
+  }
   ctx.drawImage(previewSnapshot, 0, 0);
+  const label = !printPreview ? 'Original design'
+    : selectedView === 'composite' ? 'Print preview · Smooth proof' : `Print preview · Film ${selectedView}`;
+  document.getElementById('sheet-mode').textContent = label;
+  document.getElementById('sheet').setAttribute('aria-label', label);
   drawLoupeOutline(p, view);
 }
 
 function drawLoupeOutline(p, view) {
   const ctx = preview.getContext('2d');
-  if (loupeCentre) {
+  if (loupeCentre && areaVisible) {
     const k = view.dpi / 25.4;
     const side = (LOUPE_PX / p.dpi) * 25.4 * k;
     ctx.strokeStyle = '#e4572e';
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(loupeCentre[0] * k - side / 2, loupeCentre[1] * k - side / 2, side, side);
+    ctx.strokeRect(loupeCentre[0] * p.sheet[0] * k - side / 2, loupeCentre[1] * p.sheet[1] * k - side / 2, side, side);
   }
 }
 
@@ -274,32 +350,36 @@ async function update() {
   const xy = await ds.layout(p.layout);
   if (request !== revision) return;
   const view = fullView(p, PREVIEW_DPI);
-  const layers = await renderPreview(p, view, request);
+  const { layers, design } = await renderPreview(xy, p, view, request);
   if (request !== revision) return;
-  last = { p, view, layers };
+  last = { p, view, layers, design };
   populateViews(layers);
   drawPreview();
   if (loupeCentre) await renderLoupe();
-  const exportPx = fullView(p, p.dpi);
+  const exportPx = filmView(p, p.dpi);
   status(`${ds.n.toLocaleString()} images · ${layers.length} screen${layers.length > 1 ? 's' : ''} · `
-    + `export ${exportPx.w} × ${exportPx.h} px`);
+    + `films ${exportPx.w} × ${exportPx.h} px incl. bleed`);
 }
 
+let loupeRevision = 0;
 async function renderLoupe() {
+  if (!ds) return;
+  const request = ++loupeRevision;
   const p = readParams();
   const xy = await ds.layout(p.layout);
+  if (request !== loupeRevision) return;
   const k = p.dpi / 25.4;
   const view = {
     dpi: p.dpi,
-    x0: Math.round(loupeCentre[0] * k - LOUPE_PX / 2),
-    y0: Math.round(loupeCentre[1] * k - LOUPE_PX / 2),
+    x0: Math.round(loupeCentre[0] * p.sheet[0] * k - LOUPE_PX / 2),
+    y0: Math.round(loupeCentre[1] * p.sheet[1] * k - LOUPE_PX / 2),
     w: LOUPE_PX,
     h: LOUPE_PX,
   };
   const layers = pipeline(xy, p, view, false);
   loupeCanvas.getContext('2d').putImageData(viewImage(layers, p, view.w, view.h), 0, 0);
   const mm = (LOUPE_PX / k).toFixed(0);
-  loupeCaption.textContent = `${mm} × ${mm} mm at ${p.dpi} dpi · click outside the sheet to close`;
+  loupeCaption.textContent = `${mm} × ${mm} mm at ${p.dpi} dpi`;
   loupe.hidden = false;
 }
 
@@ -313,7 +393,7 @@ function motionPreview() {
     motionFrame = null;
     const p = readParams();
     if (p.sheet.join() !== last.p.sheet.join()) return;
-    const background = last.layers.some(layer => layer.name === selectedView) ? '#ffffff' : last.p.paper;
+    const background = form.elements.printPreview.checked && last.layers.some(layer => layer.name === selectedView) ? '#ffffff' : last.p.paper;
     drawMotionPreview(preview.getContext('2d'), previewSnapshot, last.p, p, background);
     drawLoupeOutline(p, last.view);
   });
@@ -343,6 +423,12 @@ window.addEventListener('pagehide', saveSettings);
 
 form.addEventListener('input', (e) => {
   if (e.target.name === 'previewFilm') return;
+  if (e.target.name === 'printPreview') {
+    updateVisibility();
+    saveSettings();
+    drawPreview();
+    return;
+  }
   updateVisibility();
   syncZoom();
   schedule(e.target.name === 'zoom');
@@ -358,7 +444,6 @@ toolButtons.forEach((button) => button.addEventListener('click', () => {
   setTool(button.id);
   saveSettings();
 }));
-document.getElementById('close-loupe').addEventListener('click', closeLoupe);
 document.getElementById('zoom-in').addEventListener('click', () => zoomMap(1.1));
 document.getElementById('zoom-out').addEventListener('click', () => zoomMap(1 / 1.1));
 form.addEventListener('submit', (event) => event.preventDefault());
@@ -367,7 +452,9 @@ preview.addEventListener('pointerdown', (event) => {
   if (!last || event.button !== 0) return;
   preview.focus({ preventScroll: true });
   if (tool === 'inspect') {
-    loupeCentre = sheetPoint(event);
+    const p = readParams();
+    const halfSide = LOUPE_PX / 2 * 25.4 / p.dpi;
+    loupeCentre = sheetPoint(event).map((mm, i) => Math.max(halfSide, Math.min(p.sheet[i] - halfSide, mm)) / p.sheet[i]);
     drawPreview();
     renderLoupe();
     return;
@@ -381,6 +468,7 @@ preview.addEventListener('pointermove', (event) => {
   const point = sheetPoint(event);
   form.elements.offsetX.value = (drag.x + point[0] - drag.start[0]).toFixed(2);
   form.elements.offsetY.value = (drag.y + point[1] - drag.start[1]).toFixed(2);
+  syncPosition();
   schedule(true);
 });
 function endDrag(event) {
@@ -404,37 +492,54 @@ preview.addEventListener('keydown', (event) => {
   else if (event.key.toLowerCase() === 'm') { setTool('move'); saveSettings(); }
   else if (event.key.toLowerCase() === 'i') { setTool('inspect'); saveSettings(); }
   else if (event.key === 'Enter' && tool === 'inspect') {
-    loupeCentre = readParams().sheet.map((mm) => mm / 2);
+    loupeCentre = [0.5, 0.5];
     drawPreview();
     renderLoupe();
   }
 });
-document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeLoupe(); });
-document.getElementById('sheet').addEventListener('click', (event) => {
-  if (event.target !== preview) closeLoupe();
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') { setTool('move'); saveSettings(); }
 });
 
+// Hide every floating panel to look at the sheet alone (H, or the corner toggle).
+const chromeToggle = document.getElementById('chrome-toggle');
+function toggleChrome() {
+  const hidden = document.body.classList.toggle('chrome-hidden');
+  chromeToggle.textContent = hidden ? 'Show panels' : 'Hide panels';
+}
+chromeToggle.addEventListener('click', toggleChrome);
+document.addEventListener('keydown', (event) => {
+  if (event.key.toLowerCase() !== 'h' || event.metaKey || event.ctrlKey || event.altKey) return;
+  if (event.target.closest?.('input:not([type=radio]), textarea, select')) return;
+  toggleChrome();
+});
+
+let exportId = 0;
 exportBtn.addEventListener('click', async () => {
   if (!ds || busy) return;
+  let save;
+  try {
+    save = await chooseSaver(); // first, while the click still counts as user activation
+  } catch (err) {
+    if (err.name !== 'AbortError') status(`Export failed: ${err.message}`);
+    return;
+  }
   busy = true;
   exportBtn.disabled = true;
   try {
     const p = readParams();
-    const xy = await ds.layout(p.layout);
-    const view = fullView(p, p.dpi);
-    status(`Rendering ${view.w} × ${view.h} px…`);
-    await tick();
-    const layers = pipeline(xy, p, view, false);
-    const base = `surprise-machines_${p.render}_${p.inkMode}_${p.dpi}dpi`;
-    for (const [i, L] of layers.entries()) {
-      status(`Encoding film ${i + 1}/${layers.length} (${L.name})…`);
-      await tick();
-      download(await imageDataToPng(film(L, view.w, view.h), p.dpi), `${base}_${i + 1}-${L.name}.png`);
+    const view = filmView(p, p.dpi);
+    const writes = [];
+    const file = (f) => writes.push(save(f));
+    let count;
+    if (exportWorker.ok) {
+      count = await exportWorker.request({ type: 'export', id: ++exportId, p, view }, { progress: status, file });
+    } else {
+      const xy = await ds.layout(p.layout);
+      count = await renderFilms(ds, xy, p, view, { progress: async (msg) => { status(msg); await tick(); }, file });
     }
-    status('Encoding composite proof…');
-    await tick();
-    download(await imageDataToPng(composite(layers, p.paper, view.w, view.h), p.dpi), `${base}_proof.png`);
-    status(`Exported ${layers.length} film${layers.length > 1 ? 's' : ''} + proof at ${p.dpi} dpi.`);
+    await Promise.all(writes);
+    status(`Exported ${count} film${count > 1 ? 's' : ''} + proof at ${p.dpi} dpi (${view.w} × ${view.h} px with registration bleed).`);
   } catch (err) {
     console.error(err);
     status(`Export failed: ${err.message}`);
@@ -445,19 +550,24 @@ exportBtn.addEventListener('click', async () => {
 });
 
 restoreSettings();
-saveSettings();
+syncPosition();
 updateVisibility();
 syncZoom();
-setTool(tool);
+setTool(tool, false);
+setAreaVisible(areaVisible);
 loadDataset(status)
   .then(async (data) => {
     ds = data;
     const positions = await ds.layout('umap');
     const { n, meanCellArea, pointSizes, css, lum, cluster } = ds;
-    previewWorker.postMessage({ type: 'init', dataset: { n, meanCellArea, pointSizes, css, lum, cluster }, positions });
+    const init = { type: 'init', dataset: { n, meanCellArea, pointSizes, css, lum, cluster }, positions };
+    previewWorker.init(init);
+    exportWorker.init(init);
     await update();
     form.querySelectorAll('.panel-settings').forEach((settings) => { settings.disabled = false; });
-    canvasButtons.forEach((button) => { button.disabled = false; });
+    toolButtons.forEach((button) => { button.disabled = false; });
+    areaToggle.disabled = false;
+    syncPosition();
     syncZoom();
     exportBtn.disabled = false;
     document.getElementById('sheet').setAttribute('aria-busy', 'false');

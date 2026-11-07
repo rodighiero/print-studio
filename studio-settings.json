@@ -1,7 +1,9 @@
 {
   "values": {
+    "project": "surprise-machines",
+    "printPreview": true,
     "sheet": "420x594",
-    "zoom": "1",
+    "zoom": "1.6",
     "offsetX": "0",
     "offsetY": "0",
     "render": "dots",
@@ -26,6 +28,7 @@
   "referencePixelRatio": 2,
   "view": "composite",
   "tool": "move",
+  "areaVisible": true,
   "positionVersion": 2,
-  "zoomRangeVersion": 1
+  "zoomRangeVersion": 2
 }

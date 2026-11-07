@@ -55,7 +55,7 @@ export async function loadDataset(status = () => {}) {
     sizes.map((_, i) => loadImage(`${atlasDir}/atlas-${i}.jpg`))
   );
 
-  status('Measuring image colours…');
+  status('Measuring image colors…');
   const color = new Uint8ClampedArray(n * 3);
   const lum = new Float32Array(n); // 0 = black, 1 = white
   const css = new Array(n);

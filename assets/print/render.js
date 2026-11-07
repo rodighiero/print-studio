@@ -1,5 +1,5 @@
 // Draws the design as RGBA before ink separation, preserving mark coverage.
-// Everything is placed in sheet millimetres, so the same params render identically
+// Everything is placed in sheet millimeters, so the same params render identically
 // at any dpi and for any crop ("view") of the sheet.
 //
 // view = { dpi, x0, y0, w, h }  -> pixel window of the sheet at `dpi`
@@ -28,6 +28,14 @@ export function fullView(p, dpi) {
   return { dpi, x0: 0, y0: 0, w: Math.round(p.sheet[0] * k), h: Math.round(p.sheet[1] * k) };
 }
 
+// Films extend past the sheet by a bleed that carries the registration marks.
+export const BLEED_MM = 10;
+export function filmView(p, dpi) {
+  const sheet = fullView(p, dpi);
+  const b = Math.round(BLEED_MM * dpi / 25.4);
+  return { dpi, x0: -b, y0: -b, w: sheet.w + 2 * b, h: sheet.h + 2 * b, trim: { w: sheet.w, h: sheet.h } };
+}
+
 // Original viewer: scalar * canvas.clientHeight * 0.00001, applied to
 // each image's cell dimensions. Its canvas extends 10 px above and 60 px
 // below the window (assets/css/style.css), so height = window height + 70.
@@ -49,11 +57,16 @@ export function originalMarkArea(ds, p) {
 export function renderDesign(ds, xy, p, view, palette) {
   const canvas = new OffscreenCanvas(view.w, view.h);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  // Keep artwork coverage separate from its colour. Blending tiny marks
+  // Keep artwork coverage separate from its color. Blending tiny marks
   // into white here makes flat spot separation mistake them for paper.
 
   const k = view.dpi / 25.4;
   const g = sheetGeometry(p);
+  // The artwork never spills past the sheet edge (into the film bleed).
+  const sheet = fullView(p, view.dpi);
+  ctx.beginPath();
+  ctx.rect(-view.x0, -view.y0, sheet.w, sheet.h);
+  ctx.clip();
 
   const area = originalMarkArea(ds, p) * k * k;
   const radius = Math.sqrt(area / Math.PI);

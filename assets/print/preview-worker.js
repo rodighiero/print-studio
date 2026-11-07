@@ -1,9 +1,11 @@
+// Renders previews and full-resolution exports off the main thread.
 import { renderDesign } from './render.js';
 import { separate } from './separate.js';
+import { renderFilms } from './export.js';
 
 let dataset;
 let positions;
-self.onmessage = ({ data }) => {
+self.onmessage = async ({ data }) => {
   if (data.type === 'init') {
     dataset = data.dataset;
     positions = data.positions;
@@ -11,9 +13,17 @@ self.onmessage = ({ data }) => {
   }
   const { id, p, view } = data;
   try {
-    const image = renderDesign(dataset, positions, p, view, p.palette);
-    const layers = separate(image, p, view, true);
-    self.postMessage({ id, layers }, layers.map(layer => layer.data.buffer));
+    if (data.type === 'export') {
+      const done = await renderFilms(dataset, positions, p, view, {
+        progress: (message) => self.postMessage({ id, progress: message }),
+        file: (file) => self.postMessage({ id, file }),
+      });
+      self.postMessage({ id, done });
+      return;
+    }
+    const design = renderDesign(dataset, positions, p, view, p.palette);
+    const layers = separate(design, p, view, true);
+    self.postMessage({ id, preview: { design, layers } }, [design.data.buffer, ...layers.map(layer => layer.data.buffer)]);
   } catch (error) {
     self.postMessage({ id, error: error.message });
   }

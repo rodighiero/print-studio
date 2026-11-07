@@ -1,117 +1,148 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-US">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Surprise Machines — Print Studio</title>
-  <meta name="description" content="Explore 213,330 Harvard Art Museums images and compose screen-printing films in an interactive print studio.">
+  <title>Print Studio</title>
+  <meta name="description" content="A print studio that turns data visualizations into screen-printing films. Current project: Surprise Machines, 213,330 Harvard Art Museums images.">
   <link rel="stylesheet" href="assets/print/print.css">
 </head>
 <body>
-  <form id="controls" class="workspace" autocomplete="off">
-    <aside id="panel-left" class="panel" aria-label="Print composition settings">
-      <h1><a class="brand" href="./">Surprise Machines <span>Print Studio</span></a></h1>
-      <fieldset class="panel-settings" disabled>
-      <fieldset>
-        <legend>Composition</legend>
-        <fieldset class="radio-group"><legend>Format</legend>
-          <div class="radio-options compact"><label class="radio-option"><input type="radio" name="sheet" value="420x594" checked> <span>A2</span></label>
-          <label class="radio-option"><input type="radio" name="sheet" value="297x420"> <span>A3</span></label></div>
+  <form id="controls" class="studio" autocomplete="off">
+    <!-- The sheet fills the window between the two floating panel columns. -->
+    <main id="sheet" aria-label="Print sheet" aria-busy="true">
+      <output id="sheet-mode" class="card" aria-live="polite">Print preview</output>
+      <canvas id="preview" tabindex="0" role="img" aria-label="Print preview. Drag to move the map. Use plus and minus to zoom. Press I, then click to select the detail shown in the Inspect panel."></canvas>
+    </main>
+
+    <!-- Two columns at the window sides leave the full height to the sheet. -->
+    <div class="column" id="column-left">
+      <p class="credit panel">
+        <a class="title" href="./">Print Studio</a>
+        <a class="external" href="https://github.com/rodighiero/print-studio" target="_blank" rel="noopener">GitHub</a>
+      </p>
+      <!-- The visualization being printed. More projects will join this menu. -->
+      <aside id="panel-project" class="card panel" aria-label="Project">
+        <fieldset class="panel-settings" disabled>
+          <fieldset class="group"><legend>Project</legend>
+            <select name="project" aria-label="Project">
+              <option value="surprise-machines">Surprise Machines</option>
+            </select>
+            <a class="external" href="https://github.com/rodighiero/surprise-machines" target="_blank" rel="noopener">Source</a>
+          </fieldset>
         </fieldset>
-        <label>Zoom <input type="range" name="zoom" min="1" max="2.5" step="0.01" value="1"></label>
-        <div class="offset-row"><span id="offset-x-label">Offset X (mm)</span><output name="offsetX" aria-labelledby="offset-x-label">0</output></div>
-        <div class="offset-row"><span id="offset-y-label">Offset Y (mm)</span><output name="offsetY" aria-labelledby="offset-y-label">0</output></div>
-      </fieldset>
-
-
-      <fieldset>
-        <legend>Appearance</legend>
-        <fieldset class="radio-group"><legend>Colour by</legend>
-          <div class="radio-options compact"><label class="radio-option"><input type="radio" name="colorBy" value="image" checked> <span>Image colour</span></label>
-          <label class="radio-option"><input type="radio" name="colorBy" value="tone"> <span>Grey tone</span></label>
-          <label class="radio-option"><input type="radio" name="colorBy" value="cluster"> <span>Cluster</span></label>
-          <label class="radio-option"><input type="radio" name="colorBy" value="solid"> <span>Solid black</span></label></div>
+      </aside>
+      <!-- The composition: what is printed and where -->
+      <aside id="panel-composition" class="card panel" aria-label="Composition">
+        <fieldset class="panel-settings" disabled>
+          <fieldset class="group"><legend>Format</legend>
+            <div class="options inline">
+              <label class="radio-option"><input type="radio" name="sheet" value="420x594" checked><span>A2</span></label>
+              <label class="radio-option"><input type="radio" name="sheet" value="297x420"><span>A3</span></label>
+            </div>
+            <div class="field">
+              <span>Zoom</span>
+              <div class="zoom-controls">
+                <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
+                <output id="zoom-level" aria-label="Map zoom">160%</output>
+                <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+              </div>
+            </div>
+            <input class="zoom-slider" type="range" name="zoom" aria-label="Map zoom" min="1" max="2.5" step="any" value="1.6">
+          </fieldset>
+          <fieldset class="group"><legend>Position</legend>
+            <div class="field"><span id="offset-x-label">Offset X</span><span><output name="offsetX" aria-labelledby="offset-x-label">0</output> mm</span></div>
+            <div class="field"><span id="offset-y-label">Offset Y</span><span><output name="offsetY" aria-labelledby="offset-y-label">0</output> mm</span></div>
+            <button type="button" id="reset-position">Reset position</button>
+          </fieldset>
         </fieldset>
-        <fieldset class="radio-group"><legend>Mark area</legend>
-          <div class="radio-options"><label class="radio-option"><input type="radio" name="sizeBy" value="constant" checked> <span>Constant</span></label>
-          <label class="radio-option"><input type="radio" name="sizeBy" value="darkness"> <span>By image darkness</span></label></div>
+      </aside>
+      <aside id="panel-colors" class="card panel" aria-label="Colors">
+        <fieldset class="panel-settings" disabled>
+          <fieldset class="group"><legend>Colors</legend>
+            <div class="options">
+              <label class="radio-option"><input type="radio" name="colorBy" value="image" checked><span>Image color</span></label>
+              <label class="radio-option"><input type="radio" name="colorBy" value="tone"><span>Gray tone</span></label>
+              <label class="radio-option"><input type="radio" name="colorBy" value="solid"><span>Solid black</span></label>
+            </div>
+          </fieldset>
         </fieldset>
-      </fieldset>
-      </fieldset>
-    </aside>
-
-  <main aria-label="Print workspace">
-    <div class="toolbar" role="group" aria-label="Canvas tools">
-      <div class="tool-group">
-        <button type="button" id="move" aria-pressed="true">Move</button>
-        <button type="button" id="inspect" aria-pressed="false">Inspect detail</button>
-      </div>
-      <div class="tool-group">
-        <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
-        <output id="zoom-level" aria-label="Map zoom">100%</output>
-        <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
-      </div>
-    </div>
-    <p class="canvas-hint" id="canvas-hint">Drag to position the map · Scroll to zoom</p>
-    <div id="sheet" aria-busy="true"><canvas id="preview" tabindex="0" role="img" aria-label="Print preview. Drag to move the map. Use plus and minus to zoom. Press I to inspect a detail." aria-describedby="canvas-hint"></canvas></div>
-    <p id="status" role="status">Loading collection…</p>
-    <figure id="loupe" hidden>
-      <button type="button" id="close-loupe" aria-label="Close detail">×</button>
-      <canvas width="600" height="600"></canvas>
-      <figcaption></figcaption>
-    </figure>
-  </main>
-
-    <aside id="panel-right" class="panel" aria-labelledby="output-title">
-      <h2 id="output-title">Inks &amp; output</h2>
-      <p class="intro">Colour separation &amp; print files</p>
-      <fieldset class="panel-settings" disabled>
-      <fieldset>
-        <legend>Inks</legend>
-        <div class="radio-options" role="radiogroup" aria-label="Ink separation"><label class="radio-option"><input type="radio" name="inkMode" value="mono" checked> <span>One colour</span></label>
-          <label class="radio-option"><input type="radio" name="inkMode" value="spot"> <span>Spot colours</span></label>
-          <label class="radio-option"><input type="radio" name="inkMode" value="cmyk"> <span>CMYK</span></label></div>
-        <label data-show="inkMode=mono">Ink <input type="color" name="monoInk" value="#1a1a1a"></label>
-        <label data-show="inkMode=spot">Number of inks <input type="number" name="inkCount" value="3" min="1" max="4" step="1"></label>
-        <div class="swatches" data-show="inkMode=spot">
-          <input type="color" aria-label="Spot ink 1" name="spot1" value="#e4572e">
-          <input type="color" aria-label="Spot ink 2" name="spot2" value="#1b4f9c">
-          <input type="color" aria-label="Spot ink 3" name="spot3" value="#f2a541">
-          <input type="color" aria-label="Spot ink 4" name="spot4" value="#1a1a1a">
+      </aside>
+      <figure id="loupe" class="card panel" aria-label="Inspect">
+        <div class="inspect-heading">
+          <span>Inspect</span>
         </div>
-        <label>Paper <input type="color" name="paper" value="#f4f0e6"></label>
-        <fieldset class="radio-group" data-show="inkMode=spot"><legend>Separation</legend>
-          <div class="radio-options"><label class="radio-option"><input type="radio" name="spotMethod" value="flat" checked> <span>Flat (nearest ink)</span></label>
-          <label class="radio-option"><input type="radio" name="spotMethod" value="dither"> <span>Dithered</span></label></div>
+        <div class="inspect-tools" role="group" aria-label="Canvas tools">
+          <button type="button" id="move" aria-pressed="true" disabled>Move</button>
+          <button type="button" id="inspect" aria-pressed="false" disabled>Select area</button>
+        </div>
+        <canvas width="600" height="600" role="img" aria-label="Selected area at export resolution"></canvas>
+        <figcaption>Loading detail…</figcaption>
+        <button type="button" id="toggle-area" aria-pressed="true" aria-controls="preview" disabled>Hide area</button>
+      </figure>
+    </div>
+    <div class="column" id="column-right">
+      <!-- The inks: how the composition becomes screens -->
+      <aside id="panel-inks" class="card panel" aria-label="Inks and screening">
+        <fieldset class="panel-settings" disabled>
+          <fieldset class="group"><legend>Inks</legend>
+            <div class="options">
+              <label class="radio-option"><input type="radio" name="inkMode" value="mono" checked><span>One color</span></label>
+              <label class="radio-option"><input type="radio" name="inkMode" value="spot"><span>Spot colors</span></label>
+              <label class="radio-option"><input type="radio" name="inkMode" value="cmyk"><span>CMYK</span></label>
+            </div>
+            <label class="field" data-show="inkMode=mono">Ink <input type="color" name="monoInk" value="#1a1a1a"></label>
+            <label class="field" data-show="inkMode=spot">Number of inks <input type="number" name="inkCount" value="3" min="1" max="4" step="1"></label>
+            <div class="swatches" data-show="inkMode=spot">
+              <input type="color" aria-label="Spot ink 1" name="spot1" value="#e4572e">
+              <input type="color" aria-label="Spot ink 2" name="spot2" value="#1b4f9c">
+              <input type="color" aria-label="Spot ink 3" name="spot3" value="#f2a541">
+              <input type="color" aria-label="Spot ink 4" name="spot4" value="#1a1a1a">
+            </div>
+            <label class="field">Paper <input type="color" name="paper" value="#f4f0e6"></label>
+          </fieldset>
+          <fieldset class="group" data-show="inkMode=spot"><legend>Separation</legend>
+            <div class="options">
+              <label class="radio-option"><input type="radio" name="spotMethod" value="flat" checked><span>Flat (nearest ink)</span></label>
+              <label class="radio-option"><input type="radio" name="spotMethod" value="dither"><span>Dithered</span></label>
+            </div>
+          </fieldset>
+          <fieldset class="group" data-show="inkMode=mono,cmyk"><legend>Screen</legend>
+            <div class="options">
+              <label class="radio-option"><input type="radio" name="screen" value="am" checked><span>Halftone dots</span></label>
+              <label class="radio-option"><input type="radio" name="screen" value="lines"><span>Line screen</span></label>
+              <label class="radio-option"><input type="radio" name="screen" value="fs"><span>Stochastic</span></label>
+              <label class="radio-option"><input type="radio" name="screen" value="threshold"><span>Threshold</span></label>
+            </div>
+            <label class="field" data-show="inkMode=mono,cmyk;screen=am,lines">Frequency (lpi) <input type="number" name="lpi" value="35" min="5" max="85" step="1"></label>
+            <label class="field" data-show="inkMode=mono;screen=am,lines">Angle (°) <input type="number" name="angle" value="22.5" step="0.5"></label>
+            <label class="field" data-show="inkMode=cmyk">Black generation <input type="range" name="gcr" min="0" max="1" step="0.05" value="1"></label>
+          </fieldset>
         </fieldset>
-        <fieldset class="radio-group" data-show="inkMode=mono,cmyk"><legend>Screen</legend>
-          <div class="radio-options compact"><label class="radio-option"><input type="radio" name="screen" value="am" checked> <span>Halftone dots</span></label>
-          <label class="radio-option"><input type="radio" name="screen" value="lines"> <span>Line screen</span></label>
-          <label class="radio-option"><input type="radio" name="screen" value="fs"> <span>Stochastic</span></label>
-          <label class="radio-option"><input type="radio" name="screen" value="threshold"> <span>Threshold</span></label></div>
+      </aside>
+      <!-- What is viewed and what is exported -->
+      <footer id="panel-output" class="card panel" aria-label="Output">
+        <fieldset class="panel-settings" disabled>
+          <fieldset class="group"><legend>Central image</legend>
+            <label class="field toggle-field">Print preview <input type="checkbox" name="printPreview" checked aria-controls="preview view"></label>
+          </fieldset>
+          <fieldset class="group" id="view"><legend>Preview view</legend>
+            <div class="options inline"><label class="radio-option"><input type="radio" name="previewFilm" value="composite" checked><span>Composite</span></label></div>
+          </fieldset>
+          <fieldset class="group"><legend>Resolution (dpi)</legend>
+            <div class="options inline">
+              <label class="radio-option"><input type="radio" name="dpi" value="300" checked><span>300</span></label>
+              <label class="radio-option"><input type="radio" name="dpi" value="400"><span>400</span></label>
+            </div>
+          </fieldset>
         </fieldset>
-        <label data-show="inkMode=mono,cmyk;screen=am,lines">Frequency (LPI) <input type="number" name="lpi" value="35" min="5" max="85" step="1"></label>
-        <label data-show="inkMode=mono;screen=am,lines">Angle (°) <input type="number" name="angle" value="22.5" step="0.5"></label>
-        <label data-show="inkMode=cmyk">Black generation <input type="range" name="gcr" min="0" max="1" step="0.05" value="1"></label>
-      </fieldset>
+        <button type="button" id="export" disabled title="One PNG film per ink plus a color proof">Export films &amp; proof</button>
+        <p id="status" role="status">Loading collection…</p>
+      </footer>
+      <!-- Not a .panel: it must survive hiding the panels, or there is no way back. -->
+      <button type="button" id="chrome-toggle" class="card" title="Hide or show panels (H)">Hide panels</button>
+    </div>
 
-      <fieldset>
-        <legend>Output</legend>
-        <fieldset class="radio-group" id="view"><legend>Preview</legend>
-          <div class="radio-options"><label class="radio-option"><input type="radio" name="previewFilm" value="composite" checked> <span>Composite</span></label></div>
-        </fieldset>
-        <fieldset class="radio-group"><legend>Resolution (dpi)</legend>
-          <div class="radio-options compact"><label class="radio-option"><input type="radio" name="dpi" value="300" checked> <span>300</span></label>
-          <label class="radio-option"><input type="radio" name="dpi" value="400"> <span>400</span></label></div>
-        </fieldset>
-
-      </fieldset>
-      </fieldset>
-      <div class="export-footer">
-        <button type="button" id="export" disabled>Export films &amp; proof <span aria-hidden="true">↗</span></button>
-        <p class="hint">PNG · One film per ink + colour proof</p>
-      </div>
-    </aside>
   </form>
   <script type="module" src="assets/print/app.js"></script>
 </body>

@@ -27,6 +27,8 @@ function draw(t, p, dpi = 300, crop = 0) {
     const ctx = {
       fillRect(x, y, w, h) { marks.push({ x: x + w / 2, y: y + h / 2, area: w * h, color: ctx.fillStyle, kind: 'coverage', side: w }); },
       beginPath() { circle = null; },
+      rect() {},
+      clip() {},
       arc(x, y, r) { circle = { x, y, area: Math.PI * r * r, radius: r, kind: 'circle' }; },
       fill() { marks.push({ ...circle, color: ctx.fillStyle }); },
       getImageData() { return {}; },
@@ -115,7 +117,7 @@ test('subpixel dots keep the original area instead of using an oversized boundin
   near(dot.area, originalMarkArea(ds, base) * (60 / 25.4) ** 2);
 });
 
-test('dot colour controls work; old manual sizes are ignored', t => {
+test('dot color controls work; old manual sizes are ignored', t => {
   const render = 'dots';
   const image = draw(t, { ...base, render, size: 0.001 });
   const oldLargeSize = draw(t, { ...base, render, size: 20 });
@@ -136,5 +138,7 @@ test('panel and committed defaults contain only automatic dots', () => {
   assert.ok(!html.includes('name="size"'));
   assert.ok(!('size' in settings.values));
   assert.ok(!html.includes('<legend>Dot area</legend>'));
-  assert.ok(html.includes('<legend>Mark area</legend>'));
+  assert.ok(!html.includes('<legend>Mark area</legend>'));
+  assert.ok(!html.includes('name="sizeBy"'));
+  assert.equal(settings.values.sizeBy, 'constant');
 });

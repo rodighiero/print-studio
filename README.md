@@ -1,6 +1,6 @@
-# Surprise Machines — Screen Printing
+# Print Studio
 
-A print studio that turns the [_Surprise Machines_](https://github.com/rodighiero/surprise-machines) visualization — 213,330 images from the Harvard Art Museums arranged by visual similarity — into screen-printing films.
+A print studio that turns data visualizations into screen-printing films. Projects are chosen from the *Project* menu; the first (and for now only) one is the [_Surprise Machines_](https://github.com/rodighiero/surprise-machines) visualization — 213,330 images from the Harvard Art Museums arranged by visual similarity.
 
 The interactive Print Studio lives at `index.html`. It renders the collection onto a print sheet (A2 by default), separates it into inks, and exports one film per screen as a high-resolution PNG.
 
@@ -20,29 +20,31 @@ The studio fetches `data/` at runtime, so it must be served over HTTP (not opene
 
 ## Print Studio
 
-`studio-settings.json` stores the project defaults and can be committed with the source. Fresh sessions load this file. Browser changes override these defaults, save automatically in local storage and are restored after a refresh, including map position, inks, output resolution and the selected preview film. Settings stay in the same browser and site address. The sheet is centred on the original Surprise Machines camera target (`x = 0.2`, `y = 0.1`), rather than the coordinate bounds. Older saved positions are centred once when upgrading to this behaviour.
+`studio-settings.json` stores the project defaults and can be committed with the source. Fresh sessions load this file. Browser changes override these defaults, save automatically in local storage (only the values that differ from the defaults, so untouched settings follow later changes to the file) and are restored after a refresh, including map position, inks, output resolution, the selected preview film, and whether the Inspect area outline is shown. Settings stay in the same browser and site address. The sheet is centered on the original Surprise Machines camera target (`x = 0.2`, `y = 0.1`), rather than the coordinate bounds. Older saved positions are centered once when upgrading to this behavior.
 
-Everything is laid out in sheet millimetres, so the same settings produce the same image at preview resolution, in the detail loupe and in the final export.
+Everything is laid out in sheet millimeters, so the same settings produce the same image at preview resolution, in the detail loupe and in the final export.
 
 **Sheet** — A2 (420 × 594 mm) or A3 (297 × 420 mm), both portrait; zoom from 100% to 250% and read-only offset values, updated by dragging the map. The map has no reserved margin or caption.
 
 **Layout** — UMAP, preserving the original collection’s arrangement by visual similarity.
 
-**Render** — One dot per artwork, coloured by image colour, grey tone, cluster or solid.
+**Colors** — Color each artwork dot by image color, gray tone, or solid black.
 
-**Mark sizing** — Dots automatically follow zoom and sheet format, using the original thumbnails’ mean area. Doubling zoom doubles the diameter and quadruples the area. “Constant” uses the same mean area for every dot. “By image darkness” multiplies dot area by image darkness. There is no manual size input. Preview, detail view and export share the same physical geometry. Subpixel circles use an equal-area coverage footprint to avoid disappearing or gaining density.
+**Mark sizing** — Dots automatically follow zoom and sheet format, using the original thumbnails’ mean area. Doubling zoom doubles the diameter and quadruples the area. Every dot uses the same mean area. There is no manual size input. Preview, detail view and export share the same physical geometry. Subpixel circles use an equal-area coverage footprint to avoid disappearing or gaining density.
 
 **Inks** — how the design is separated into screens:
 
 | Mode | Screening |
 |---|---|
-| One colour | Halftone dots or line screen (LPI, angle), stochastic error diffusion, or threshold |
-| Spot colours (1–4) | Nearest ink (flat) or dithered; cluster colours follow the ink palette so clusters separate cleanly |
+| One color | Halftone dots or line screen (LPI, angle), stochastic screening, or threshold |
+| Spot colors (1–4) | Nearest ink (flat) or dithered |
 | CMYK | Halftone at C 15°, M 75°, Y 0°, K 45°, with adjustable black generation |
 
-The preview shows the whole sheet in continuous tone over the paper colour; switch it to any single film from the *Preview* menu. Drag the sheet to position the map, scroll to zoom, or use the zoom buttons. Offsets change only when dragging and remain fixed while zooming. The +/− keys also zoom. Select *Inspect detail* and click the sheet (or press Enter for the centre) to open a loupe that renders that area at export dpi with the real screen.
+The sheet fills the window and the controls float over it in two side columns, one panel per concern: composition (including format and zoom), Colors, and the Inspect panel with canvas tools on the left; inks, screening, preview and export on the right. Press H (or *Hide panels*) to see the sheet alone. *Reset position* re-centers the map. The *Print preview* toggle switches the center image between a smooth proof with the selected inks and the original design colors. A label on the sheet identifies the active view. Preview view offers the composite or any single film while Print preview is enabled. The toggle is saved across refreshes; it affects only the center image, so Inspect and exports retain the actual screened output. Drag the sheet to position the map, scroll to zoom, or use the zoom buttons. Offsets change only when dragging and remain fixed while zooming. The +/− keys also zoom. The *Inspect* panel always shows a selected area at export dpi with the real screen, starting at the sheet center. Choose *Select area* in that panel (or press I on the sheet), then click the sheet to move the selection; Enter selects the center and Escape returns to Move. The selection stays visible while moving or zooming the map and follows changes to inks, format and resolution.
 
-**Export** writes one black-on-white PNG film per ink plus a colour proof, at 300 or 400 dpi (A2 at 300 dpi = 4961 × 7016 px). The dpi is written into each PNG (`pHYs` chunk) so RIP and layout software size it correctly. Export runs in the browser and needs several hundred MB of memory.
+**Export** writes one black-on-white PNG film per ink plus a color proof, at 300 or 400 dpi. Every film is pure black and white. Films extend 10 mm past the sheet on each side; this bleed carries identical registration targets (centered on each edge) and crop marks on every film, while the artwork stays clipped to the sheet (A2 at 300 dpi = 4961 × 7016 px sheet, 5197 × 7252 px film). The dpi is written into each PNG (`pHYs` chunk) so RIP and layout software size it correctly. In browsers that support it (Chrome, Edge) you pick a folder once and all files are written there; elsewhere each file downloads. Export renders in a background worker and needs several hundred MB of memory.
+
+All screens and dithers are anchored to absolute sheet pixels, so the loupe shows exactly the pixels the export will contain. *Stochastic* is a dispersed-noise (FM) screen; *Dithered* spot separation is an ordered dither to the ink palette. Flat spot separation picks the nearest ink (or paper) by mark color and converts partial coverage — antialiased edges and subpixel thumbnails — to film pixels with the same stochastic threshold, so density is preserved without gray pixels. Colors are matched against the chosen paper color, not white.
 
 ## Data
 
@@ -54,11 +56,13 @@ The preview shows the whole sheet in continuous tone over the paper colour; swit
 index.html              interactive Print Studio home page
 studio-settings.json    committed project defaults
 assets/print/
-  data.js               loads data/, measures each image's average colour
+  data.js               loads data/, measures each image's average color
   render.js             draws the dots in sheet mm
   separate.js           ink separation, screening, proofs
-  export.js             PNG export with dpi metadata
-  app.js                controls, preview, loupe, export
+  export.js             film/proof rendering, PNG export with dpi metadata, saving
+  preview-worker.js     background worker for previews and exports
+  motion-preview.js     moves the last preview while dragging/zooming
+  app.js                controls, preview, loupe, export (falls back to the main thread if workers fail)
 data/                   PixPlot output (see above)
 vite.config.js          dev server on port 8000, studio build
 ```

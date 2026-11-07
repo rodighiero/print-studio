@@ -14,7 +14,7 @@ function draw(previous, current, background) {
   return calls;
 }
 
-test('zoom keeps the paper fixed and scales the proof around the sheet centre', () => {
+test('zoom keeps the paper fixed and scales the proof around the sheet center', () => {
   const calls = draw(sheet, { ...sheet, zoom: 2 }, '#f4f0e6');
   assert.deepEqual(calls[0], ['paper', '#f4f0e6', 0, 0, 840, 1188]);
   assert.deepEqual(calls[1], ['artwork', snapshot, -420, -594, 1680, 2376]);

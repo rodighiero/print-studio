@@ -1,8 +1,8 @@
 // Turns the RGBA design into ink layers (one per screen).
 // A layer is { name, ink: [r,g,b], data: Uint8Array } where data is ink amount 0..255.
 // With simulate=true layers keep continuous coverage (for the small preview);
-// otherwise process/mono layers are screened to pure 0/255 masks. Flat spot
-// layers retain antialiased edge coverage for film export.
+// otherwise every layer is a pure 0/255 film mask. All screens and dithers are
+// computed in absolute sheet pixels, so any crop (the loupe) matches the export.
 
 import { hexToRgb } from './render.js';
 
@@ -15,10 +15,12 @@ export function separate(img, p, view, simulate) {
 
   if (p.inkMode === 'spot') {
     const inks = p.inks.map(hexToRgb);
+    const paper = hexToRgb(p.paper || '#ffffff');
     const masks = inks.map(() => new Uint8Array(n));
-    if (p.spotMethod === 'dither') ditherToPalette(data, w, h, inks, masks);
-    else nearestToPalette(data, n, inks, masks);
-    return masks.map((m, i) => ({ name: `ink${i + 1}-${p.inks[i].slice(1)}`, ink: inks[i], data: m }));
+    if (p.spotMethod === 'dither') ditherToPalette(data, view, inks, paper, masks);
+    else nearestToPalette(data, view, inks, paper, masks, simulate);
+    // Name by position only, so editing an ink color keeps the selected preview film.
+    return masks.map((m, i) => ({ name: `ink${i + 1}`, file: `ink${i + 1}-${p.inks[i].slice(1)}`, ink: inks[i], data: m }));
   }
 
   if (p.inkMode === 'cmyk') {
@@ -33,10 +35,10 @@ export function separate(img, p, view, simulate) {
       ch.Y[i] = 255 * (y - k) / d * alpha;
       ch.K[i] = 255 * k * alpha;
     }
-    return Object.keys(ch).map((key) => ({
+    return Object.keys(ch).map((key, c) => ({
       name: key,
       ink: hexToRgb(CMYK_INKS[key]),
-      data: simulate ? ch[key] : screen(ch[key], CMYK_ANGLES[key], p, view),
+      data: simulate ? ch[key] : screen(ch[key], CMYK_ANGLES[key], p, view, c),
     }));
   }
 
@@ -54,7 +56,7 @@ export function separate(img, p, view, simulate) {
 
 /* ---------- screening (coverage -> 0/255) ---------- */
 
-function screen(cov, angleDeg, p, view) {
+function screen(cov, angleDeg, p, view, channel = 0) {
   const { w, h } = view;
   const out = new Uint8Array(w * h);
 
@@ -64,27 +66,22 @@ function screen(cov, angleDeg, p, view) {
   }
 
   if (p.screen === 'fs') {
-    // Floyd–Steinberg with two row buffers (full-sheet float buffers would be huge)
-    let cur = new Float32Array(w + 2), next = new Float32Array(w + 2);
+    // Stochastic (FM) screen: a dispersed noise threshold in absolute sheet
+    // pixels. Unlike error diffusion it does not depend on where a crop starts.
+    // Each process channel uses a shifted pattern so inks do not stack.
+    const sx = channel * 37, sy = channel * 71;
     for (let y = 0; y < h; y++) {
+      const Y = y + view.y0 + sy;
       for (let x = 0; x < w; x++) {
         const i = y * w + x;
-        const v = cov[i] + cur[x + 1];
-        const q = v > 127 ? 255 : 0;
-        out[i] = q;
-        const e = v - q;
-        cur[x + 2] += e * 7 / 16;
-        next[x] += e * 3 / 16;
-        next[x + 1] += e * 5 / 16;
-        next[x + 2] += e * 1 / 16;
+        if (cov[i] > threshold(x + view.x0 + sx, Y)) out[i] = 255;
       }
-      [cur, next] = [next, cur];
-      next.fill(0);
     }
     return out;
   }
 
   // AM screens, computed in absolute sheet pixels so crops match the full render
+  if (!(p.lpi > 0) || !Number.isFinite(angleDeg)) throw new Error(`Invalid screen: ${p.lpi} lpi at ${angleDeg}°`);
   const period = view.dpi / p.lpi;
   const a = (angleDeg * Math.PI) / 180;
   const ca = Math.cos(a) / period, sa = Math.sin(a) / period;
@@ -111,15 +108,23 @@ function screen(cov, angleDeg, p, view) {
   return out;
 }
 
-/* ---------- spot colour assignment ---------- */
+// Interleaved gradient noise: a well-dispersed threshold in 0.5..254.5 for
+// integer sheet pixel (X, Y), so coverage 0 never inks and 255 always does.
+export function threshold(X, Y) {
+  const t = 52.9829189 * ((0.06711056 * X + 0.00583715 * Y) % 1);
+  return 0.5 + 254 * (t - Math.floor(t));
+}
+
+/* ---------- spot color assignment ---------- */
 
 function dist(r, g, b, c) {
   const dr = r - c[0], dg = g - c[1], db = b - c[2];
   return 2 * dr * dr + 4 * dg * dg + 3 * db * db;
 }
 
-function nearest(r, g, b, inks) {
-  let best = -1, bd = dist(r, g, b, [255, 255, 255]); // -1 = paper
+// Index of the closest ink, or -1 when the paper itself is closest.
+function nearest(r, g, b, inks, paper) {
+  let best = -1, bd = dist(r, g, b, paper);
   for (let j = 0; j < inks.length; j++) {
     const d = dist(r, g, b, inks[j]);
     if (d < bd) { bd = d; best = j; }
@@ -127,43 +132,92 @@ function nearest(r, g, b, inks) {
   return best;
 }
 
-function nearestToPalette(data, n, inks, masks) {
-  for (let i = 0, o = 0; i < n; i++, o += 4) {
-    if (!data[o + 3]) continue;
-    const j = nearest(data[o], data[o + 1], data[o + 2], inks);
-    if (j >= 0) masks[j][i] = data[o + 3];
+// Mark color picks the ink; mark coverage (alpha) becomes ink amount. Films
+// threshold that coverage against the noise screen, so antialiased edges and
+// subpixel thumbnails keep their average density as pure black/white pixels.
+function nearestToPalette(data, view, inks, paper, masks, simulate) {
+  const { w, h } = view;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x, o = i * 4, a = data[o + 3];
+      if (!a) continue;
+      const j = nearest(data[o], data[o + 1], data[o + 2], inks, paper);
+      if (j < 0) continue;
+      if (simulate) masks[j][i] = a;
+      else if (a > threshold(x + view.x0, y + view.y0)) masks[j][i] = 255;
+    }
   }
 }
 
-function ditherToPalette(data, w, h, inks, masks) {
-  const pal = [[255, 255, 255], ...inks];
-  let cur = new Float32Array((w + 2) * 3), next = new Float32Array((w + 2) * 3);
+// Ordered dither to the ink palette: the color over paper is offset by the
+// sheet-anchored noise before choosing the nearest ink, so crops match.
+const DITHER_SPREAD = 96;
+function ditherToPalette(data, view, inks, paper, masks) {
+  const { w, h } = view;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const i = y * w + x, o = i * 4, e0 = (x + 1) * 3;
+      const i = y * w + x, o = i * 4;
       const alpha = data[o + 3] / 255;
-      const r = 255 + (data[o] - 255) * alpha + cur[e0];
-      const g = 255 + (data[o + 1] - 255) * alpha + cur[e0 + 1];
-      const b = 255 + (data[o + 2] - 255) * alpha + cur[e0 + 2];
-      const j = nearest(r, g, b, inks);
+      if (!alpha) continue;
+      const d = (threshold(x + view.x0, y + view.y0) / 255 - 0.5) * DITHER_SPREAD;
+      const r = paper[0] + (data[o] - paper[0]) * alpha + d;
+      const g = paper[1] + (data[o + 1] - paper[1]) * alpha + d;
+      const b = paper[2] + (data[o + 2] - paper[2]) * alpha + d;
+      const j = nearest(r, g, b, inks, paper);
       if (j >= 0) masks[j][i] = 255;
-      const q = pal[j + 1];
-      const er = [r - q[0], g - q[1], b - q[2]];
-      for (let c = 0; c < 3; c++) {
-        cur[e0 + 3 + c] += er[c] * 7 / 16;
-        next[e0 - 3 + c] += er[c] * 3 / 16;
-        next[e0 + c] += er[c] * 5 / 16;
-        next[e0 + 3 + c] += er[c] * 1 / 16;
+    }
+  }
+}
+
+/* ---------- registration marks (export films only) ---------- */
+
+// Draws crosshair targets centered in the bleed on each side of the sheet and
+// crop marks at the corners, identically on every film. `view.trim` is the
+// sheet size in pixels; the sheet starts at (-view.x0, -view.y0).
+export function addMarks(layers, view) {
+  const bx = -view.x0, by = -view.y0;
+  const bleed = Math.min(bx, by);
+  if (bleed < 8) return;
+  const k = view.dpi / 25.4;
+  const lw = Math.max(1, 0.25 * k) / 2;
+  const R = bleed * 0.25, arm = bleed * 0.4;
+  const { w: tw, h: th } = view.trim;
+  const ink = (x, y) => {
+    if (x < 0 || y < 0 || x >= view.w || y >= view.h) return;
+    const i = y * view.w + x;
+    for (const L of layers) L.data[i] = 255;
+  };
+  const target = (cx, cy) => {
+    for (let y = Math.floor(cy - arm); y <= Math.ceil(cy + arm); y++) {
+      for (let x = Math.floor(cx - arm); x <= Math.ceil(cx + arm); x++) {
+        const dx = x + 0.5 - cx, dy = y + 0.5 - cy;
+        const onCross = (Math.abs(dx) <= lw && Math.abs(dy) <= arm) || (Math.abs(dy) <= lw && Math.abs(dx) <= arm);
+        if (onCross || Math.abs(Math.hypot(dx, dy) - R) <= lw) ink(x, y);
       }
     }
-    [cur, next] = [next, cur];
-    next.fill(0);
+  };
+  target(bx + tw / 2, by / 2);
+  target(bx + tw / 2, by + th + by / 2);
+  target(bx / 2, by + th / 2);
+  target(bx + tw + bx / 2, by + th / 2);
+
+  // Crop marks: trim lines extended into the bleed, starting 2 mm off the sheet.
+  const gap = Math.round(2 * k), t = Math.max(1, Math.round(2 * lw)), h0 = Math.floor(t / 2);
+  for (const [ex, dx] of [[bx, -1], [bx + tw, 1]]) {
+    for (const [ey, dy] of [[by, -1], [by + th, 1]]) {
+      for (let d = gap; d < bleed - 1; d++) {
+        for (let s = -h0; s < t - h0; s++) {
+          ink(ex + dx * d - (dx < 0 ? 1 : 0), ey + s); // horizontal, on the trim line
+          ink(ex + s, ey + dy * d - (dy < 0 ? 1 : 0)); // vertical, on the trim line
+        }
+      }
+    }
   }
 }
 
 /* ---------- previews ---------- */
 
-// Simulated print: inks multiplied over the paper colour
+// Simulated print: inks multiplied over the paper color
 export function composite(layers, paperHex, w, h) {
   const out = new ImageData(w, h);
   const d = out.data;
