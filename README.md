@@ -1,5 +1,7 @@
 # Print Studio
 
+[**Open Print Studio →**](https://rodighiero.github.io/print-studio/)
+
 Print Studio turns data visualizations into films for screen printing. Compose a print sheet, choose your inks, inspect the screened detail, and export one film per ink alongside a color proof.
 
 The first project is [*Surprise Machines*](https://github.com/rodighiero/surprise-machines): **213,330 images from the Harvard Art Museums**, arranged by visual similarity. Each artwork becomes a dot whose color comes from its source image, translating the collection into a printable landscape.
@@ -27,6 +29,8 @@ npm run preview
 ```
 
 The source repository is available at [github.com/rodighiero/print-studio](https://github.com/rodighiero/print-studio). The build includes the collection data in `dist/`, ready for static hosting. Stop the development server before running the preview server; both use port 8000.
+
+The [live studio](https://rodighiero.github.io/print-studio/) is hosted on GitHub Pages. Pushes to `main` run the tests, build the studio with its collection data, and deploy it through [GitHub Actions](.github/workflows/pages.yml).
 
 ## Compose a print
 
