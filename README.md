@@ -91,8 +91,8 @@ A CMYK export of *Surprise Machines* at 300 dpi: the composite proof on the chos
 </p>
 
 | Cyan (C) | Magenta (M) | Yellow (Y) | Black (K) |
-| --- | --- | --- | --- |
-| [![Cyan separation film](docs/images/output-cyan.png)](docs/images/output-cyan.png) | [![Magenta separation film](docs/images/output-magenta.png)](docs/images/output-magenta.png) | [![Yellow separation film](docs/images/output-yellow.png)](docs/images/output-yellow.png) | [![Black separation film](docs/images/output-black.png)](docs/images/output-black.png) |
+| :---: | :---: | :---: | :---: |
+| <a href="docs/images/output-cyan.png"><img src="docs/images/output-cyan.png" width="180" alt="Cyan separation film"></a> | <a href="docs/images/output-magenta.png"><img src="docs/images/output-magenta.png" width="180" alt="Magenta separation film"></a> | <a href="docs/images/output-yellow.png"><img src="docs/images/output-yellow.png" width="180" alt="Yellow separation film"></a> | <a href="docs/images/output-black.png"><img src="docs/images/output-black.png" width="180" alt="Black separation film"></a> |
 
 ## Settings and rendering
 
