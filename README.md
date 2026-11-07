@@ -82,6 +82,18 @@ Each film extends **10 mm beyond the sheet on every side**, carrying matching re
 
 Where the browser supports folder selection, choose a destination once for all files. Otherwise, files download individually. Export always uses the actual screened output, regardless of the Print preview toggle. Full-resolution exports run in a background worker and can use several hundred megabytes of memory.
 
+### Example output
+
+A CMYK export of *Surprise Machines* at 300 dpi: the composite proof on the chosen paper color, followed by the four black-on-white separation films. Registration targets and crop marks align across every film. Click an image to open the full-resolution PNG.
+
+<p align="center">
+  <a href="docs/images/output-proof.png"><img src="docs/images/output-proof.png" width="420" alt="CMYK composite proof of Surprise Machines on warm paper, with registration targets and crop marks."></a>
+</p>
+
+| Cyan (C) | Magenta (M) | Yellow (Y) | Black (K) |
+| --- | --- | --- | --- |
+| [![Cyan separation film](docs/images/output-cyan.png)](docs/images/output-cyan.png) | [![Magenta separation film](docs/images/output-magenta.png)](docs/images/output-magenta.png) | [![Yellow separation film](docs/images/output-yellow.png)](docs/images/output-yellow.png) | [![Black separation film](docs/images/output-black.png)](docs/images/output-black.png) |
+
 ## Settings and rendering
 
 [`studio-settings.json`](studio-settings.json) defines the project defaults. Browser changes save automatically in local storage and return after a refresh, including composition, ink colors, paper, resolution, and the selected film. Only overrides are saved, so untouched controls follow future default changes. Settings are specific to the browser and site address; saved edits to generated palettes override their generated defaults.
