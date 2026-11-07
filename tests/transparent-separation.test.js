@@ -125,3 +125,24 @@ test('AM screening rejects an invalid frequency instead of exporting blank or so
     assert.throws(() => separate(black, { inkMode: 'mono', inks: ['#000000'], screen: 'am', lpi, angle: 22.5 }, view, false));
   }
 });
+
+test('dithered spot films preserve faint colored marks instead of blending them into paper', () => {
+  const w = 256, h = 256, view = { dpi: 300, x0: 0, y0: 0, w, h };
+  for (const alpha of [4, 64, 191]) {
+    const [layer] = separate(uniform(w, h, [0, 0, 255, alpha]), {
+      inkMode: 'spot', spotMethod: 'dither', inks: ['#0000ff'], paper: '#ffffff',
+    }, view, false);
+    const density = layer.data.reduce((sum, value) => sum + value, 0) / (255 * w * h);
+    assert.ok(Math.abs(density - alpha / 255) < 0.01, `${alpha}: ${density}`);
+  }
+});
+
+test('solid ink remains solid at every halftone phase', () => {
+  const w = 64, h = 64;
+  for (const screen of ['am', 'lines']) {
+    const [layer] = separate(uniform(w, h, [0, 0, 0, 255]), {
+      inkMode: 'mono', inks: ['#000000'], screen, lpi: 300, angle: 0,
+    }, { dpi: 300, x0: 0, y0: 0, w, h }, false);
+    assert.ok(layer.data.every(value => value === 255));
+  }
+});

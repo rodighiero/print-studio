@@ -22,7 +22,8 @@ self.onmessage = async ({ data }) => {
       return;
     }
     const design = renderDesign(dataset, positions, p, view, p.palette);
-    const layers = separate(design, p, view, true);
+    const layers = data.type === 'inspect' && !data.printPreview
+      ? [] : separate(design, p, view, data.type !== 'inspect');
     self.postMessage({ id, preview: { design, layers } }, [design.data.buffer, ...layers.map(layer => layer.data.buffer)]);
   } catch (error) {
     self.postMessage({ id, error: error.message });

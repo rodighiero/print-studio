@@ -93,6 +93,7 @@ function screen(cov, angleDeg, p, view, channel = 0) {
       const i = y * w + x;
       const c = cov[i] / 255;
       if (c <= 0) continue;
+      if (c >= 1) { out[i] = 255; continue; }
       const X = x + view.x0 + 0.5;
       const u = X * ca + Y * sa;
       let s;
@@ -149,8 +150,8 @@ function nearestToPalette(data, view, inks, paper, masks, simulate) {
   }
 }
 
-// Ordered dither to the ink palette: the color over paper is offset by the
-// sheet-anchored noise before choosing the nearest ink, so crops match.
+// Dither original mark colors separately from coverage so faint marks retain
+// their density. Both noise fields are anchored to sheet pixels so crops match.
 const DITHER_SPREAD = 96;
 function ditherToPalette(data, view, inks, paper, masks) {
   const { w, h } = view;
@@ -158,11 +159,11 @@ function ditherToPalette(data, view, inks, paper, masks) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x, o = i * 4;
       const alpha = data[o + 3] / 255;
-      if (!alpha) continue;
+      if (!alpha || alpha * 255 <= threshold(x + view.x0 + 19, y + view.y0 + 53)) continue;
       const d = (threshold(x + view.x0, y + view.y0) / 255 - 0.5) * DITHER_SPREAD;
-      const r = paper[0] + (data[o] - paper[0]) * alpha + d;
-      const g = paper[1] + (data[o + 1] - paper[1]) * alpha + d;
-      const b = paper[2] + (data[o + 2] - paper[2]) * alpha + d;
+      const r = data[o] + d;
+      const g = data[o + 1] + d;
+      const b = data[o + 2] + d;
       const j = nearest(r, g, b, inks, paper);
       if (j >= 0) masks[j][i] = 255;
     }

@@ -1,15 +1,15 @@
 /* Print Studio — the sheet fills the window and the controls float over it
    as small neutral cards, one per concern, in two side columns:
-   tools and composition (left), inks and output (right).
-   Same idiom as Spherical Projection: no borders, no accent color, buttons
-   that read as text; gray = available, black = selected. */
+   tools and composition (left), preview and export (right).
+   Neutral controls with no accent color; gray = available, black = selected.
+   Main actions use bordered buttons, with a solid fill for export. */
 
 :root {
   --edge: clamp(12px, min(3vw, 3vh), 32px); /* inset of every edge panel */
   --side: 210px;                             /* width of the side columns */
   --toggle: 28px;                            /* height of the panel toggle */
   --panel-gap: 14px;
-  --section-gap: 24px;
+  --section-gap: 36px;
   --control-gap: 8px;
   --choice-gap: 6px;
   --bg: #ebebea;
@@ -45,7 +45,7 @@ body.chrome-hidden .panel { display: none !important; }
 fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 legend { padding: 0; }
 
-/* The one button idiom: text that happens to be clickable. */
+/* Compact text controls, with a shared button treatment for main actions. */
 button {
   margin: 0; padding: 0; border: 0; background: none;
   color: var(--muted); text-transform: uppercase; cursor: pointer;
@@ -53,6 +53,22 @@ button {
 }
 button:not(:disabled):hover { color: var(--hover); }
 button:disabled { opacity: 0.4; cursor: default; }
+
+.action-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; min-height: 32px; padding: 8px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.22); border-radius: 3px;
+  background: rgba(255, 255, 255, 0.5); color: var(--ink);
+  line-height: 1.3; text-align: center;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.action-button:not(:disabled):hover {
+  background: rgba(0, 0, 0, 0.06); border-color: var(--ink); color: var(--ink);
+}
+.action-button:not(:disabled):active { background: rgba(0, 0, 0, 0.12); }
+.action-primary { background: var(--ink); border-color: var(--ink); color: #fff; }
+.action-primary:not(:disabled):hover { background: #333; border-color: #333; color: #fff; }
+.action-primary:not(:disabled):active { background: #555; border-color: #555; }
 
 /* Radio choices: gray labels; the checked one turns black with a bullet. */
 .options { display: flex; flex-direction: column; gap: var(--choice-gap); }
@@ -119,6 +135,8 @@ input[type='color']::-webkit-color-swatch-wrapper { padding: 0; }
 input[type='color']::-webkit-color-swatch { border: 0; border-radius: 0; }
 input[type='color']::-moz-color-swatch { border: 0; border-radius: 0; }
 .swatches { display: flex; gap: 6px; }
+.ink-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 15px; }
+.ink-option > .radio-option { flex: 1; }
 
 /* ── Left column: title, tools, composition, loupe ─────────────────────── */
 
@@ -131,11 +149,7 @@ input[type='color']::-moz-color-swatch { border: 0; border-radius: 0; }
 
 .zoom-controls { display: flex; align-items: center; gap: 12px; }
 input.zoom-slider { flex: none; width: 100%; max-width: none; }
-.inspect-tools { display: flex; align-items: center; gap: 12px; }
-#reset-position { align-self: flex-start; }
-#loupe button[aria-pressed='true'] { color: var(--ink); }
-#loupe button[aria-pressed]::before { content: '•'; display: inline-block; width: 9px; color: transparent; }
-#loupe button[aria-pressed='true']::before { color: inherit; }
+#inspect[aria-pressed='true'] { background: rgba(0, 0, 0, 0.08); border-color: var(--ink); }
 #zoom-in, #zoom-out { font-size: 12px; line-height: 1; }
 #zoom-level { min-width: 3.4em; text-align: center; font-variant-numeric: tabular-nums; }
 
@@ -143,15 +157,14 @@ input.zoom-slider { flex: none; width: 100%; max-width: none; }
 #loupe { position: relative; display: flex; flex-direction: column; gap: var(--control-gap); margin: auto 0 0; }
 #loupe canvas { display: block; width: 100%; height: auto; background: #fff; }
 #loupe figcaption { margin: 0; color: var(--muted); font-size: 8px; text-transform: uppercase; line-height: 1.4; }
-#toggle-area { align-self: flex-start; }
+.inspect-hint { margin: 0; color: var(--label); font-size: 8px; line-height: 1.5; }
 .inspect-heading { display: flex; align-items: center; justify-content: space-between; text-transform: uppercase; }
 .inspect-heading > span { color: var(--label); font-size: 8px; font-weight: 700; letter-spacing: 0.08em; }
 select { width: 100%; padding: 3px 0; border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; background: transparent; color: var(--ink); }
 
-/* ── Right column: inks, output, panel toggle ──────────────────────────── */
+/* ── Right column: preview, export, panel toggle ─────────────────── */
 
 #panel-output { display: flex; flex-direction: column; gap: var(--section-gap); margin-top: auto; }
-#export { align-self: flex-start; color: var(--ink); }
 #export::before { content: '↓ '; }
 #status { margin: 0; color: var(--muted); font-size: 8px; line-height: 1.4; text-transform: uppercase; }
 /* Pinned to the window corner, outside the column flow, so it stays put when
@@ -170,7 +183,6 @@ select { width: 100%; padding: 3px 0; border: 0; border-bottom: 1px solid var(--
   transition: opacity 0.2s ease;
 }
 body.chrome-hidden #sheet { inset: var(--edge); }
-#sheet-mode { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); padding: 6px 10px; white-space: nowrap; color: var(--label); font-size: 8px; text-transform: uppercase; pointer-events: none; z-index: 1; }
 #sheet[aria-busy='true'] { opacity: 0.35; }
 #preview {
   max-width: 100%; max-height: 100%; width: auto; height: auto;
@@ -178,7 +190,11 @@ body.chrome-hidden #sheet { inset: var(--edge); }
   cursor: grab; touch-action: none; user-select: none;
 }
 #preview:focus-visible { outline: 1px solid rgba(0, 0, 0, 0.25); outline-offset: -1px; }
-#preview[data-tool='inspect'] { cursor: crosshair; }
+#preview[data-tool='inspect'] { cursor: none; }
+#inspection-area {
+  position: absolute; pointer-events: none; border: 1px solid #e4572e;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8); z-index: 2;
+}
 #preview.dragging { cursor: grabbing; }
 
 /* ── Narrow windows: the panels stop floating and stack under the sheet ── */
@@ -191,9 +207,9 @@ body.chrome-hidden #sheet { inset: var(--edge); }
   .credit { order: 0; padding: 0; }
   #panel-project { order: 1; }
   #loupe { order: 3; margin: 0; }
-  #panel-output { order: 4; margin: 0; }
-  #panel-composition { order: 5; }
-  #panel-colors { order: 6; }
-  #panel-inks { order: 7; }
+  #panel-preview { order: 4; }
+  #panel-output { order: 5; margin: 0; }
+  #panel-composition { order: 6; }
+  #panel-colors { order: 7; }
   #chrome-toggle { display: none; }
 }

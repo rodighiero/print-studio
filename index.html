@@ -11,8 +11,8 @@
   <form id="controls" class="studio" autocomplete="off">
     <!-- The sheet fills the window between the two floating panel columns. -->
     <main id="sheet" aria-label="Print sheet" aria-busy="true">
-      <output id="sheet-mode" class="card" aria-live="polite">Print preview</output>
-      <canvas id="preview" tabindex="0" role="img" aria-label="Print preview. Drag to move the map. Use plus and minus to zoom. Press I, then click to select the detail shown in the Inspect panel."></canvas>
+      <canvas id="preview" tabindex="0" role="img" aria-label="Print sheet. Drag to move the map. Use plus and minus to zoom. Press I to inspect, move the square to explore, and click or press Enter to select an area. Press Escape to return to dragging."></canvas>
+      <div id="inspection-area" hidden aria-hidden="true"></div>
     </main>
 
     <!-- Two columns at the window sides leave the full height to the sheet. -->
@@ -53,7 +53,7 @@
           <fieldset class="group"><legend>Position</legend>
             <div class="field"><span id="offset-x-label">Offset X</span><span><output name="offsetX" aria-labelledby="offset-x-label">0</output> mm</span></div>
             <div class="field"><span id="offset-y-label">Offset Y</span><span><output name="offsetY" aria-labelledby="offset-y-label">0</output> mm</span></div>
-            <button type="button" id="reset-position">Reset position</button>
+            <button type="button" id="reset-position" class="action-button">Reset position</button>
           </fieldset>
         </fieldset>
       </aside>
@@ -72,40 +72,54 @@
         <div class="inspect-heading">
           <span>Inspect</span>
         </div>
-        <div class="inspect-tools" role="group" aria-label="Canvas tools">
-          <button type="button" id="move" aria-pressed="true" disabled>Move</button>
-          <button type="button" id="inspect" aria-pressed="false" disabled>Select area</button>
-        </div>
         <canvas width="600" height="600" role="img" aria-label="Selected area at export resolution"></canvas>
         <figcaption>Loading detail…</figcaption>
-        <button type="button" id="toggle-area" aria-pressed="true" aria-controls="preview" disabled>Hide area</button>
+        <button type="button" id="inspect" class="action-button" aria-pressed="false" aria-controls="preview" aria-describedby="inspect-help" disabled>Inspect image</button>
+        <p id="inspect-help" class="inspect-hint" hidden>Move the square to inspect. Click to select an area. Escape cancels.</p>
       </figure>
     </div>
     <div class="column" id="column-right">
-      <!-- The inks: how the composition becomes screens -->
-      <aside id="panel-inks" class="card panel" aria-label="Inks and screening">
+      <!-- Preview controls, inks, separation and screening settings -->
+      <aside id="panel-preview" class="card panel" aria-label="Preview">
         <fieldset class="panel-settings" disabled>
+          <fieldset class="group"><legend>Preview</legend>
+            <label class="field toggle-field">Print preview <input type="checkbox" name="printPreview" checked aria-controls="preview view"></label>
+          </fieldset>
           <fieldset class="group"><legend>Inks</legend>
             <div class="options">
-              <label class="radio-option"><input type="radio" name="inkMode" value="mono" checked><span>One color</span></label>
-              <label class="radio-option"><input type="radio" name="inkMode" value="spot"><span>Spot colors</span></label>
+              <div class="ink-option">
+                <label class="radio-option"><input type="radio" name="inkMode" value="mono" checked><span>One color</span></label>
+                <input type="color" name="monoInk" aria-label="One color ink" value="#1a1a1a" data-show="inkMode=mono">
+              </div>
+              <div class="ink-option">
+                <label class="radio-option"><input type="radio" name="inkMode" value="spot2"><span>2 spot colors</span></label>
+                <div class="swatches" data-show="inkMode=spot2">
+                  <input type="color" aria-label="Two-color palette ink 1" name="spot2Ink1" value="#000000">
+                  <input type="color" aria-label="Two-color palette ink 2" name="spot2Ink2" value="#000000">
+                </div>
+              </div>
+              <div class="ink-option">
+                <label class="radio-option"><input type="radio" name="inkMode" value="spot3"><span>3 spot colors</span></label>
+                <div class="swatches" data-show="inkMode=spot3">
+                  <input type="color" aria-label="Three-color palette ink 1" name="spot3Ink1" value="#000000">
+                  <input type="color" aria-label="Three-color palette ink 2" name="spot3Ink2" value="#000000">
+                  <input type="color" aria-label="Three-color palette ink 3" name="spot3Ink3" value="#000000">
+                </div>
+              </div>
               <label class="radio-option"><input type="radio" name="inkMode" value="cmyk"><span>CMYK</span></label>
             </div>
-            <label class="field" data-show="inkMode=mono">Ink <input type="color" name="monoInk" value="#1a1a1a"></label>
-            <label class="field" data-show="inkMode=spot">Number of inks <input type="number" name="inkCount" value="3" min="1" max="4" step="1"></label>
-            <div class="swatches" data-show="inkMode=spot">
-              <input type="color" aria-label="Spot ink 1" name="spot1" value="#e4572e">
-              <input type="color" aria-label="Spot ink 2" name="spot2" value="#1b4f9c">
-              <input type="color" aria-label="Spot ink 3" name="spot3" value="#f2a541">
-              <input type="color" aria-label="Spot ink 4" name="spot4" value="#1a1a1a">
-            </div>
-            <label class="field">Paper <input type="color" name="paper" value="#f4f0e6"></label>
           </fieldset>
-          <fieldset class="group" data-show="inkMode=spot"><legend>Separation</legend>
+          <fieldset class="group" data-show="inkMode=spot2,spot3"><legend>Separation</legend>
             <div class="options">
               <label class="radio-option"><input type="radio" name="spotMethod" value="flat" checked><span>Flat (nearest ink)</span></label>
               <label class="radio-option"><input type="radio" name="spotMethod" value="dither"><span>Dithered</span></label>
             </div>
+          </fieldset>
+          <fieldset class="group"><legend>Paper</legend>
+            <label class="field">Color <input type="color" name="paper" value="#f4f0e6"></label>
+          </fieldset>
+          <fieldset class="group" id="view"><legend>Films</legend>
+            <div class="options"><label class="radio-option"><input type="radio" name="previewFilm" value="composite" checked><span>Composite</span></label></div>
           </fieldset>
           <fieldset class="group" data-show="inkMode=mono,cmyk"><legend>Screen</legend>
             <div class="options">
@@ -120,15 +134,9 @@
           </fieldset>
         </fieldset>
       </aside>
-      <!-- What is viewed and what is exported -->
-      <footer id="panel-output" class="card panel" aria-label="Output">
+      <!-- Export resolution and files -->
+      <footer id="panel-output" class="card panel" aria-label="Export">
         <fieldset class="panel-settings" disabled>
-          <fieldset class="group"><legend>Central image</legend>
-            <label class="field toggle-field">Print preview <input type="checkbox" name="printPreview" checked aria-controls="preview view"></label>
-          </fieldset>
-          <fieldset class="group" id="view"><legend>Preview view</legend>
-            <div class="options inline"><label class="radio-option"><input type="radio" name="previewFilm" value="composite" checked><span>Composite</span></label></div>
-          </fieldset>
           <fieldset class="group"><legend>Resolution (dpi)</legend>
             <div class="options inline">
               <label class="radio-option"><input type="radio" name="dpi" value="300" checked><span>300</span></label>
@@ -136,7 +144,7 @@
             </div>
           </fieldset>
         </fieldset>
-        <button type="button" id="export" disabled title="One PNG film per ink plus a color proof">Export films &amp; proof</button>
+        <button type="button" id="export" class="action-button action-primary" disabled title="One PNG film per ink plus a color proof">Export films &amp; proof</button>
         <p id="status" role="status">Loading collection…</p>
       </footer>
       <!-- Not a .panel: it must survive hiding the panels, or there is no way back. -->

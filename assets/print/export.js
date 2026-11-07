@@ -95,10 +95,10 @@ export async function renderFilms(dataset, positions, p, view, { progress, file 
   const base = `surprise-machines_${p.render}_${p.inkMode}_${p.dpi}dpi`;
   for (const [i, L] of layers.entries()) {
     await progress(`Encoding film ${i + 1}/${layers.length} (${L.name})…`);
-    file({ name: `${base}_${i + 1}-${L.file ?? L.name}.png`, blob: await filmPng(L, view, p.dpi) });
+    await file({ name: `${base}_${i + 1}-${L.file ?? L.name}.png`, blob: await filmPng(L, view, p.dpi) });
   }
   await progress('Encoding composite proof…');
-  file({ name: `${base}_proof.png`, blob: await imageDataToPng(composite(layers, p.paper, view.w, view.h), p.dpi) });
+  await file({ name: `${base}_proof.png`, blob: await imageDataToPng(composite(layers, p.paper, view.w, view.h), p.dpi) });
   return layers.length;
 }
 
