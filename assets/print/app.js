@@ -210,13 +210,7 @@ function syncZoom() {
 function setTool(next, cancel = false) {
   if (next === 'inspect' && tool !== 'inspect') {
     selectedCentre = [...loupeCentre];
-    if (drag) {
-      const pointerId = drag.id;
-      drag = null;
-      preview.classList.remove('dragging');
-      if (preview.hasPointerCapture(pointerId)) preview.releasePointerCapture(pointerId);
-      schedule();
-    }
+    if (drag) endDrag(drag.id);
   }
   if (cancel && tool === 'inspect') {
     loupeCentre = [...selectedCentre];
@@ -577,15 +571,16 @@ preview.addEventListener('pointerleave', () => {
   drawLoupeOutline();
 });
 window.addEventListener('resize', () => drawLoupeOutline());
-function endDrag(event) {
-  if (!drag || event.pointerId !== drag.id) return;
+function endDrag(pointerId) {
+  if (!drag || pointerId !== drag.id) return;
   drag = null;
   preview.classList.remove('dragging');
+  if (preview.hasPointerCapture(pointerId)) preview.releasePointerCapture(pointerId);
   schedule();
 }
-preview.addEventListener('pointerup', endDrag);
-preview.addEventListener('pointercancel', endDrag);
-preview.addEventListener('lostpointercapture', endDrag);
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  preview.addEventListener(type, (event) => endDrag(event.pointerId));
+}
 preview.addEventListener('wheel', (event) => {
   if (!last || event.ctrlKey) return;
   event.preventDefault();
