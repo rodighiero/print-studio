@@ -4,11 +4,6 @@
 //
 // view = { dpi, x0, y0, w, h }  -> pixel window of the sheet at `dpi`
 
-export const CATEGORICAL = [
-  '#e4572e', '#1b4f9c', '#f2a541', '#2e8b57', '#8e44ad',
-  '#17becf', '#c0392b', '#7f8c8d', '#d35400', '#34495e',
-];
-
 // Match World.getInitialLocation() in the original Surprise Machines viewer:
 // https://github.com/rodighiero/surprise-machines/blob/main/assets/js/tsne.js
 const NETWORK_CENTRE = { x: 0.2, y: 0.1 };
@@ -54,7 +49,7 @@ export function originalMarkArea(ds, p) {
   return originalImageScale(ds, p) ** 2 * ds.meanCellArea;
 }
 
-export function renderDesign(ds, xy, p, view, palette) {
+export function renderDesign(ds, xy, p, view) {
   const canvas = new OffscreenCanvas(view.w, view.h);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   // Keep artwork coverage separate from its color. Blending tiny marks
@@ -79,7 +74,7 @@ export function renderDesign(ds, xy, p, view, palette) {
     const weight = p.sizeBy === 'darkness' ? Math.max(0, 1 - ds.lum[i]) : 1;
     if (weight <= 0) continue;
     const r = radius * Math.sqrt(weight);
-    ctx.fillStyle = markColor(ds, i, p, palette);
+    ctx.fillStyle = markColor(ds, i, p);
     if (r < 0.75) {
       // At subpixel scale, preserve exact area with an antialiased footprint.
       const side = Math.sqrt(area * weight);
@@ -94,16 +89,12 @@ export function renderDesign(ds, xy, p, view, palette) {
   return ctx.getImageData(0, 0, view.w, view.h);
 }
 
-function markColor(ds, i, p, palette) {
+function markColor(ds, i, p) {
   switch (p.colorBy) {
     case 'image': return ds.css[i];
     case 'tone': {
       const v = Math.round(ds.lum[i] * 255);
       return `rgb(${v},${v},${v})`;
-    }
-    case 'cluster': {
-      const c = ds.cluster[i];
-      return c < 0 ? '#999' : palette[c % palette.length];
     }
     default: return '#000';
   }

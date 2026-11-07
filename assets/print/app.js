@@ -4,7 +4,7 @@ import { inspectionView } from './inspection.js';
 import { extractPalette } from './palette.js';
 import { contrastPalette } from './palette-contrast.js';
 import { loadDataset } from './data.js';
-import { renderDesign, fullView, filmView, CATEGORICAL } from './render.js';
+import { renderDesign, fullView, filmView } from './render.js';
 import { separate, composite, film } from './separate.js';
 import { renderFilms, chooseSaver } from './export.js';
 
@@ -30,7 +30,7 @@ const inspectionArea = document.getElementById('inspection-area');
 const inspectHelp = document.getElementById('inspect-help');
 
 let ds = null;
-let last = null;        // { p, view, layers } of the current preview
+let last = null;        // { p, view, layers, design } of the current preview
 let loupeCentre = [0.5, 0.5]; // selected center as fractions of sheet width/height
 let inspectionPointer = false;
 let inspectionPanelHover = false;
@@ -95,7 +95,7 @@ async function renderPreview(xy, p, view, id) {
     if (previewWorker.ok) throw error; // a render error, not a worker failure
     console.warn('Preview worker unavailable, rendering on the main thread.', error);
   }
-  const design = renderDesign(ds, xy, p, view, p.palette);
+  const design = renderDesign(ds, xy, p, view);
   return { design, layers: separate(design, p, view, true) };
 }
 let selectedView = 'composite';
@@ -173,7 +173,6 @@ function applySettings(saved) {
     // Move older saves to the current default zoom once; retain later user choices.
     if (saved.zoomRangeVersion !== 2) form.elements.zoom.value = projectSettings.values.zoom;
     if (typeof saved.view === 'string') selectedView = saved.view;
-    if (palettesReady && (saved.positionVersion !== 2 || saved.zoomRangeVersion !== 2)) saveSettings();
   } catch {
     // Missing, outdated or unavailable storage must never prevent startup.
   }
@@ -209,7 +208,16 @@ function syncZoom() {
   document.getElementById('zoom-in').disabled = !ds || Number(zoom.value) >= Number(zoom.max);
 }
 function setTool(next, cancel = false) {
-  if (next === 'inspect' && tool !== 'inspect') selectedCentre = [...loupeCentre];
+  if (next === 'inspect' && tool !== 'inspect') {
+    selectedCentre = [...loupeCentre];
+    if (drag) {
+      const pointerId = drag.id;
+      drag = null;
+      preview.classList.remove('dragging');
+      if (preview.hasPointerCapture(pointerId)) preview.releasePointerCapture(pointerId);
+      schedule();
+    }
+  }
   if (cancel && tool === 'inspect') {
     loupeCentre = [...selectedCentre];
     renderLoupe();
@@ -255,6 +263,7 @@ function sheetPoint(event) {
 }
 
 const status = (msg) => { statusEl.textContent = msg; };
+const previewStatus = (msg) => { if (!busy) status(msg); };
 // Empty or out-of-range typed values would blank (NaN) or flood (0) every screened film.
 const clampNum = (v, min, max, fallback) => (Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback);
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -287,8 +296,6 @@ function readParams() {
     angle: Number.isFinite(num('angle')) ? num('angle') : 22.5,
     gcr: num('gcr'),
     dpi: num('dpi'),
-    // cluster colors follow the inks when printing spot colors
-    palette: inkMode === 'spot' ? spots : CATEGORICAL,
   };
 }
 
@@ -377,7 +384,7 @@ async function update() {
   updateVisibility();
   const request = revision;
   const p = readParams();
-  status('Rendering preview…');
+  previewStatus('Rendering preview…');
   await tick();
   const xy = await ds.layout(p.layout);
   if (request !== revision) return;
@@ -388,8 +395,9 @@ async function update() {
   populateViews(layers);
   drawPreview();
   if (loupeCentre) await renderLoupe();
+  if (request !== revision) return;
   const exportPx = filmView(p, p.dpi);
-  status(`${ds.n.toLocaleString()} images · ${layers.length} screen${layers.length > 1 ? 's' : ''} · `
+  previewStatus(`${ds.n.toLocaleString()} images · ${layers.length} screen${layers.length > 1 ? 's' : ''} · `
     + `films ${exportPx.w} × ${exportPx.h} px incl. bleed`);
 }
 
@@ -427,7 +435,7 @@ async function renderLoupe(moving = false) {
       if (!result) {
         const xy = await ds.layout(p.layout);
         if (epoch !== loupeEpoch) continue;
-        const design = renderDesign(ds, xy, p, view, p.palette);
+        const design = renderDesign(ds, xy, p, view);
         result = { design, layers: printPreview ? separate(design, p, view, false) : [] };
       }
       const { design, layers } = result;
@@ -485,7 +493,7 @@ async function flushPreview() {
   updating = true;
   pendingUpdate = false;
   try { await update(); }
-  catch (err) { console.error(err); status(`Could not render preview: ${err.message}`); }
+  catch (err) { console.error(err); previewStatus(`Could not render preview: ${err.message}`); }
   finally {
     updating = false;
     if (pendingUpdate) flushPreview();
@@ -671,8 +679,8 @@ loadDataset(status)
     ds = data;
     initializeSpotPalettes();
     const positions = await ds.layout('umap');
-    const { n, meanCellArea, pointSizes, css, lum, cluster } = ds;
-    const init = { type: 'init', dataset: { n, meanCellArea, pointSizes, css, lum, cluster }, positions };
+    const { n, meanCellArea, pointSizes, css, lum } = ds;
+    const init = { type: 'init', dataset: { n, meanCellArea, pointSizes, css, lum }, positions };
     previewWorker.init(init);
     exportWorker.init(init);
     inspectionWorker.init(init);

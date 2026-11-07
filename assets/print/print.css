@@ -174,8 +174,7 @@ select { width: 100%; padding: 3px 0; border: 0; border-bottom: 1px solid var(--
 /* ── Sheet ─────────────────────────────────────────────────────────────── */
 
 /* The sheet keeps clear of the columns; with the panels hidden it uses the
-   whole window. The canvas must stay centered: app.js maps pointer positions
-   assuming it sits in the middle of this box. */
+   whole window. Pointer positions use the canvas’s actual bounding rectangle. */
 #sheet {
   position: absolute;
   inset: var(--edge) calc(var(--edge) + var(--side) + 24px);
@@ -211,5 +210,6 @@ body.chrome-hidden #sheet { inset: var(--edge); }
   #panel-output { order: 5; margin: 0; }
   #panel-composition { order: 6; }
   #panel-colors { order: 7; }
-  #chrome-toggle { display: none; }
+  body.chrome-hidden #sheet { inset: auto; }
+  #chrome-toggle { position: sticky; align-self: flex-end; order: 8; bottom: 12px; }
 }

@@ -11,7 +11,7 @@ const dimensions = imageList.cell_sizes.flat();
 const meanCellArea = dimensions.reduce((sum, [w, h]) => sum + w * h, 0) / dimensions.length;
 const ds = {
   n: 3, meanCellArea, pointSizes: manifest.point_sizes,
-  css: ['#123456', '#abcdef', '#335577'], lum: [0, 0.25, 1], cluster: [0, 1, 0],
+  css: ['#123456', '#abcdef', '#335577'], lum: [0, 0.25, 1],
 };
 const base = {
   sheet: [420, 594], zoom: 1, offsetX: 0, offsetY: 0,
@@ -35,7 +35,7 @@ function draw(t, p, dpi = 300, crop = 0) {
     };
     this.getContext = () => ctx;
   });
-  renderDesign(ds, [0.2,0.1, 0.3,0.1, 0.4,0.1], p, { dpi, x0: crop, y0: crop, w: 20000, h: 20000 }, ['#ff0000', '#0000ff']);
+  renderDesign(ds, [0.2,0.1, 0.3,0.1, 0.4,0.1], p, { dpi, x0: crop, y0: crop, w: 20000, h: 20000 });
   return marks;
 }
 
@@ -122,7 +122,6 @@ test('dot color controls work; old manual sizes are ignored', t => {
   const image = draw(t, { ...base, render, size: 0.001 });
   const oldLargeSize = draw(t, { ...base, render, size: 20 });
   near(image[0].area, oldLargeSize[0].area);
-  assert.equal(draw(t, { ...base, render, colorBy: 'cluster' })[0].color, '#ff0000');
   assert.equal(draw(t, { ...base, render, colorBy: 'tone' })[0].color, 'rgb(0,0,0)');
   assert.equal(draw(t, { ...base, render, colorBy: 'solid' })[0].color, '#000');
 

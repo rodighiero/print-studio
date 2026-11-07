@@ -1,5 +1,5 @@
 // Loads the PixPlot output in data/ into flat typed arrays for the print studio.
-// Cell order (atlas by atlas) is the same order used by the layouts and hotspots.
+// Cell order (atlas by atlas) is the same order used by the layout.
 
 export async function fetchJson(path) {
   const res = await fetch(path);
@@ -84,12 +84,6 @@ export async function loadDataset(status = () => {}) {
     }
   }
 
-  status('Loading clusters…');
-  const hotspots = await fetchJson(local(manifest.default_hotspots));
-  const cluster = new Int16Array(n).fill(-1);
-  hotspots.forEach((h, c) => h.images.forEach((i) => { cluster[i] = c; }));
-  const clusterLabels = hotspots.map((h) => h.label);
-
   const umap = manifest.layouts.umap.variants[0];
   const layoutPaths = {
     umap: umap.layout,
@@ -109,7 +103,6 @@ export async function loadDataset(status = () => {}) {
     n,
     meanCellArea: totalCellArea / n,
     pointSizes: manifest.point_sizes,
-    color, lum, css, cluster, clusterLabels, layout,
-    names: imagelist.images,
+    color, lum, css, layout,
   };
 }

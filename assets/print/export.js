@@ -90,7 +90,7 @@ export function download(blob, filename) {
 // `progress` may return a promise (to let the page repaint); `file` receives each PNG.
 export async function renderFilms(dataset, positions, p, view, { progress, file }) {
   await progress(`Rendering ${view.w} × ${view.h} px…`);
-  const layers = separate(renderDesign(dataset, positions, p, view, p.palette), p, view, false);
+  const layers = separate(renderDesign(dataset, positions, p, view), p, view, false);
   addMarks(layers, view);
   const base = `surprise-machines_${p.render}_${p.inkMode}_${p.dpi}dpi`;
   for (const [i, L] of layers.entries()) {

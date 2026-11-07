@@ -40,7 +40,7 @@ The **Colors** panel controls the source design: image color, gray tone, or soli
 
 ## Preview and inks
 
-Enable **Print preview** to see a smooth composite proof in the selected inks. Disable it to see the original design colors. The **Films** section lets you switch between the composite and individual ink films while Print preview is enabled.
+Enable **Print preview** to see a composite proof in the selected inks. Disable it to see the original design colors. The **Films** section lets you switch between the composite and individual ink films while Print preview is enabled.
 
 | Ink choice | Separation and screening |
 | --- | --- |
@@ -55,7 +55,7 @@ Choose the paper color separately. Color matching accounts for that paper color.
 
 ## Inspect the detail
 
-The **Inspect** panel shows a selected area at export resolution. It follows the Print preview toggle: original colors when unchecked, actual screened output when checked. The central composite is a smooth proof; Inspect reveals the film pixels.
+The **Inspect** panel shows a selected area at export resolution. It follows the Print preview toggle: original colors when unchecked, actual screened output when checked. The central image is an overview; Inspect reveals the actual screening at export resolution.
 
 Click **Inspect image** to replace the pointer with a square matching the inspection area. Move across the sheet to update the detail live, then click to keep an area and return to dragging. **Escape** or **Cancel inspection** restores the previous selection. Hover over the Inspect panel to highlight its selected area on the sheet.
 
@@ -100,7 +100,7 @@ A CMYK export of *Surprise Machines* at 300 dpi: the composite proof on the chos
 
 Geometry is defined in sheet millimeters and shared by the preview, inspection crop, and export. Screens and dithers are anchored to absolute sheet pixels so an inspection crop matches the corresponding exported area. Subpixel dots preserve their physical coverage. Flat and dithered spot separation preserve partial mark coverage as binary film pixels, keeping faint dots visible without introducing gray into the films. Fully covered marks remain solid across all screen phases.
 
-Preview, inspection, and export use separate workers, with a main-thread fallback if workers are unavailable.
+Preview, inspection, and export use separate workers. Rendering falls back to the main thread if a worker cannot start; an export interrupted by a worker crash reports an error and can be retried.
 
 ## Development and data
 
@@ -110,9 +110,9 @@ Run the checks with:
 npm test
 ```
 
-The tests cover physical mark sizing, crop consistency, palette generation and contrast, ink separation, screening, registration marks, motion previews, PNG resolution metadata, and asynchronous export failures.
+The tests cover collection loading, physical mark sizing, crop consistency, palette generation and contrast, ink separation, screening, registration marks, motion previews, PNG resolution metadata, and asynchronous export failures.
 
-`data/` contains approximately 18 MB of PixPlot output: the manifest, image list, layout, cluster hotspots, and three image atlases. The 213,330 individual thumbnails from the original repository are not included; the studio reads artwork colors from the atlases.
+`data/` contains approximately 18 MB of PixPlot output: the manifest, image list, layout, cluster hotspots, and three image atlases. Cluster hotspots are retained as source data but are no longer required by the studio. The 213,330 individual thumbnails from the original repository are not included; the studio reads artwork colors from the atlases.
 
 | Path | Purpose |
 | --- | --- |
