@@ -61,13 +61,13 @@ The sheet shows the print in the chosen inks on the paper color, at 60 dpi (tone
 
 Choose a folder once where the browser allows it; otherwise files download one by one.
 
-### Example films
+## Examples
 
-One-color A2 films with bleed at three dot sizes, exported at full resolution (open one to zoom into the dots):
+One-color A2 films of *Surprise Machines* with bleed, exported at three dot sizes. Open one to see it at full resolution and zoom into the dots.
 
 | Dot size 100% | Dot size 150% | Dot size 200% |
 | --- | --- | --- |
-| [![A2 film of Surprise Machines at 100% dot size, with bleed and registration marks.](docs/images/films/surprise-machines_A2_dot-100.png)](docs/images/films/surprise-machines_A2_dot-100.png) | [![A2 film at 150% dot size.](docs/images/films/surprise-machines_A2_dot-150.png)](docs/images/films/surprise-machines_A2_dot-150.png) | [![A2 film at 200% dot size.](docs/images/films/surprise-machines_A2_dot-200.png)](docs/images/films/surprise-machines_A2_dot-200.png) |
+| [![A2 film of Surprise Machines at 100% dot size, with bleed and registration marks.](docs/images/examples/surprise-machines_A2_dot-100.png)](docs/images/examples/surprise-machines_A2_dot-100.png) | [![A2 film at 150% dot size.](docs/images/examples/surprise-machines_A2_dot-150.png)](docs/images/examples/surprise-machines_A2_dot-150.png) | [![A2 film at 200% dot size.](docs/images/examples/surprise-machines_A2_dot-200.png)](docs/images/examples/surprise-machines_A2_dot-200.png) |
 
 ## How it works
 
