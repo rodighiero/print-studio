@@ -28,7 +28,7 @@ Open the studio over HTTP; `index.html` from the filesystem cannot load `data/`.
 - **Position**: drag the sheet to move the image; **Reset** recenters it on the image's main body (the small detached cluster is left out of the centering).
 - **Colors**: image color, gray tone or solid black.
 
-## Inks
+## Inks and sheet
 
 The sheet shows the print in the chosen inks on the paper color, at 60 dpi (tone, not dots).
 
@@ -74,8 +74,8 @@ One-color A2 films of *Surprise Machines* with bleed, exported at three dot size
 - Defaults live in [`studio-settings.json`](studio-settings.json); changes, the inspected area and hidden panels are saved in the browser.
 - Geometry is in sheet millimeters and screens are anchored to sheet pixels, so preview, Inspect and export match exactly.
 - Preview, Inspect and export run in workers, falling back to the main thread.
-- `npm test` covers loading, dot sizing, centering, crops, palettes, separation, marks, PNG export and file names.
-- `data/` holds about 18 MB of PixPlot output (manifest, image list, layout, hotspots, atlases); colors come from the atlases, not the 213,330 thumbnails.
+- `npm test` covers loading, dot sizing, centering, crops, the Inspect worker, palettes, separation, marks, motion previews, PNG export and file names.
+- `data/` holds about 18 MB of PixPlot output (manifest, image list, UMAP layout, atlases, and unused cluster hotspots); colors come from the atlases, not the 213,330 thumbnails.
 
 ### Files
 
@@ -93,7 +93,11 @@ One-color A2 films of *Surprise Machines* with bleed, exported at three dot size
 | `assets/preview-worker.js` | Preview, inspection, and export worker entry point. |
 | `assets/motion-preview.js` | Responsive composition movement while rendering. |
 | `assets/print.css` | Interface styles and responsive layout. |
+| `data/` | PixPlot collection data, copied into the build. |
+| `docs/` | README screenshot and example films. |
+| `tests/` | Node test suite (`npm test`). |
 | `vite.config.js` | Development server and static build configuration. |
+| `.github/workflows/pages.yml` | Test, build and deploy to GitHub Pages. |
 
 ## Credits and citation
 
