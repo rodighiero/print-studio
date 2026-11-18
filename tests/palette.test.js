@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractPalette } from '../assets/print/palette.js';
+import { extractPalette } from '../assets/palette.js';
 
 const samples = groups => new Uint8ClampedArray(groups.flatMap(([rgb, count]) => Array.from({ length: count }, () => rgb).flat()));
 

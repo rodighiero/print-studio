@@ -1,4 +1,4 @@
-import projectSettings from '../../studio-settings.json';
+import projectSettings from '../studio-settings.json';
 import { drawMotionPreview } from './motion-preview.js';
 import { inspectionView } from './inspection.js';
 import { extractPalette } from './palette.js';

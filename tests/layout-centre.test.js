@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { layoutCentre, sheetGeometry } from '../assets/print/render.js';
+import { layoutCentre, sheetGeometry } from '../assets/render.js';
 
 test('layout centre ignores a few stray points at the layout edges', () => {
   // 1000 points spread over x 0..0.4, y -0.6..-0.2, plus two outliers at the corners.

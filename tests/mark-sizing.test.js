@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
-import { originalImageScale, originalMarkArea, renderDesign } from '../assets/print/render.js';
+import { originalImageScale, originalMarkArea, renderDesign } from '../assets/render.js';
 
 const near = (a, b, tolerance = 1e-8) => assert.ok(Math.abs(a - b) < tolerance, `${a} ≠ ${b}`);
 const manifest = JSON.parse(readFileSync(new URL('../data/manifest.json', import.meta.url)));

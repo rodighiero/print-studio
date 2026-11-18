@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { contrastPalette, hexToOklab } from '../assets/print/palette-contrast.js';
+import { contrastPalette, hexToOklab } from '../assets/palette-contrast.js';
 
 function minimumColorDistance(palette) {
   const labs = palette.map(hexToOklab);

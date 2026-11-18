@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { separate, addMarks } from '../assets/print/separate.js';
+import { separate, addMarks } from '../assets/separate.js';
 
 const view = { dpi: 300, x0: 0, y0: 0, w: 4, h: 1 };
 const img = {

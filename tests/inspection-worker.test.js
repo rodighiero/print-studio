@@ -21,7 +21,7 @@ test('inspection worker returns real film pixels and the preview keeps continuou
         };
       }
     };
-  await import('../assets/print/preview-worker.js');
+  await import('../assets/preview-worker.js');
   await self.onmessage({ data: {
     type: 'init', dataset: { n: 0, meanCellArea: 1, pointSizes: { scatter: 0.001 } }, positions: [],
   } });

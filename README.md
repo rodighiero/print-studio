@@ -6,7 +6,7 @@ Print Studio turns data visualizations into screen-printing films: compose a she
 
 The first project is [*Surprise Machines*](https://github.com/rodighiero/surprise-machines): **213,330 Harvard Art Museums images** arranged by visual similarity, each drawn as a dot in its image's color.
 
-![Print Studio with Surprise Machines in solid black on an A2 sheet, grid and bleed marks shown, three dot sizes, the Inspect panel and the export file list.](docs/images/print-studio.png)
+![Print Studio with Surprise Machines in solid black on an A2 sheet, grid and bleed marks shown, three dot sizes, the Inspect panel and the export file list.](docs/print-studio.png)
 
 ## Getting started
 
@@ -67,7 +67,7 @@ One-color A2 films of *Surprise Machines* with bleed, exported at three dot size
 
 | Dot size 100% | Dot size 150% | Dot size 200% |
 | --- | --- | --- |
-| [![A2 film of Surprise Machines at 100% dot size, with bleed and registration marks.](docs/images/examples/surprise-machines_A2_dot-100.png)](docs/images/examples/surprise-machines_A2_dot-100.png) | [![A2 film at 150% dot size.](docs/images/examples/surprise-machines_A2_dot-150.png)](docs/images/examples/surprise-machines_A2_dot-150.png) | [![A2 film at 200% dot size.](docs/images/examples/surprise-machines_A2_dot-200.png)](docs/images/examples/surprise-machines_A2_dot-200.png) |
+| [![A2 film of Surprise Machines at 100% dot size, with bleed and registration marks.](docs/examples/surprise-machines_A2_dot-100.png)](docs/examples/surprise-machines_A2_dot-100.png) | [![A2 film at 150% dot size.](docs/examples/surprise-machines_A2_dot-150.png)](docs/examples/surprise-machines_A2_dot-150.png) | [![A2 film at 200% dot size.](docs/examples/surprise-machines_A2_dot-200.png)](docs/examples/surprise-machines_A2_dot-200.png) |
 
 ## How it works
 
@@ -83,16 +83,16 @@ One-color A2 films of *Surprise Machines* with bleed, exported at three dot size
 | --- | --- |
 | `index.html` | Studio interface. |
 | `studio-settings.json` | Committed project defaults. |
-| `assets/print/app.js` | Controls, persistence, preview, inspection, and export orchestration. |
-| `assets/print/data.js` | Collection loading and source-color measurement. |
-| `assets/print/render.js` | Physical sheet and mark geometry, and image centering. |
-| `assets/print/palette*.js` | Source-derived palettes and hue separation. |
-| `assets/print/inspection.js` | Pixel-aligned inspection crops. |
-| `assets/print/separate.js` | Ink separation, screening, composite preview, and registration marks. |
-| `assets/print/export.js` | PNG encoding, file names, resolution metadata, and saving. |
-| `assets/print/preview-worker.js` | Preview, inspection, and export worker entry point. |
-| `assets/print/motion-preview.js` | Responsive composition movement while rendering. |
-| `assets/print/print.css` | Interface styles and responsive layout. |
+| `assets/app.js` | Controls, persistence, preview, inspection, and export orchestration. |
+| `assets/data.js` | Collection loading and source-color measurement. |
+| `assets/render.js` | Physical sheet and mark geometry, and image centering. |
+| `assets/palette*.js` | Source-derived palettes and hue separation. |
+| `assets/inspection.js` | Pixel-aligned inspection crops. |
+| `assets/separate.js` | Ink separation, screening, composite preview, and registration marks. |
+| `assets/export.js` | PNG encoding, file names, resolution metadata, and saving. |
+| `assets/preview-worker.js` | Preview, inspection, and export worker entry point. |
+| `assets/motion-preview.js` | Responsive composition movement while rendering. |
+| `assets/print.css` | Interface styles and responsive layout. |
 | `vite.config.js` | Development server and static build configuration. |
 
 ## Credits and citation

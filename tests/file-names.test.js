@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filmFileName } from '../assets/print/export.js';
+import { filmFileName } from '../assets/export.js';
 
 const base = { project: 'surprise-machines', sheetName: 'A2' };
 

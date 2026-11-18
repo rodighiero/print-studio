@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadDataset } from '../assets/print/data.js';
+import { loadDataset } from '../assets/data.js';
 
 test('the studio loads source colors and layout without requiring obsolete cluster hotspots', async t => {
   const saved = Object.fromEntries(['fetch', 'Image', 'OffscreenCanvas'].map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));

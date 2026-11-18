@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inspectionView } from '../assets/print/inspection.js';
-import { fullView } from '../assets/print/render.js';
+import { inspectionView } from '../assets/inspection.js';
+import { fullView } from '../assets/render.js';
 
 test('inspection square stays inside every sheet at all selectable export resolutions', () => {
   for (const sheet of [[420, 594], [297, 420]]) {

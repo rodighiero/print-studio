@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { inflateSync } from 'node:zlib';
-import { filmPng } from '../assets/print/export.js';
+import { filmPng } from '../assets/export.js';
 
 function chunks(buf) {
   const out = {};
@@ -39,7 +39,7 @@ test('film export propagates asynchronous save failures before encoding more fil
     }
   };
   t.after(() => { if (previous) globalThis.OffscreenCanvas = previous; else delete globalThis.OffscreenCanvas; });
-  const { renderFilms } = await import('../assets/print/export.js');
+  const { renderFilms } = await import('../assets/export.js');
   let saves = 0;
   await assert.rejects(renderFilms({ n: 0, meanCellArea: 1, pointSizes: { scatter: 0.001 } }, [], {
     sheet: [420, 594], dpi: 300, zoom: 1, offsetX: 0, offsetY: 0,

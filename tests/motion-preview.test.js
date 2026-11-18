@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { drawMotionPreview } from '../assets/print/motion-preview.js';
+import { drawMotionPreview } from '../assets/motion-preview.js';
 
 const sheet = { sheet: [420, 594], zoom: 1, offsetX: 0, offsetY: 0 };
 const snapshot = { width: 840, height: 1188 };
