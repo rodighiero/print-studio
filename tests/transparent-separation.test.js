@@ -49,7 +49,6 @@ test('a crop (the loupe) matches the same area of the full export for every scre
   const modes = [
     { inkMode: 'mono', inks: ['#000000'], screen: 'fs' },
     { inkMode: 'mono', inks: ['#000000'], screen: 'am', lpi: 35, angle: 22.5 },
-    { inkMode: 'cmyk', gcr: 1, screen: 'fs' },
     { inkMode: 'spot', spotMethod: 'dither', inks: ['#e4572e', '#1b4f9c'], paper: '#f4f0e6' },
     { inkMode: 'spot', spotMethod: 'flat', inks: ['#e4572e', '#1b4f9c'], paper: '#f4f0e6' },
   ];
@@ -94,11 +93,10 @@ test('registration marks are drawn in the bleed of every film, never on the shee
   assert.equal(layers[0].data[Math.round(b / 2) * v.w + b + tw / 2], 255);
 });
 
-test('transparent canvas adds no ink in mono, CMYK or dithered spot output', () => {
+test('transparent canvas adds no ink in mono or dithered spot output', () => {
   const blank = { width: 4, height: 1, data: new Uint8ClampedArray(16) };
   const modes = [
     { inkMode: 'mono', inks: ['#000000'], screen: 'threshold' },
-    { inkMode: 'cmyk', gcr: 1, screen: 'threshold' },
     { inkMode: 'spot', spotMethod: 'dither', inks: ['#0000ff'] },
   ];
   for (const p of modes) {
@@ -110,13 +108,10 @@ test('transparent canvas adds no ink in mono, CMYK or dithered spot output', () 
   }
 });
 
-test('mono and CMYK preserve fractional mark coverage without an opaque background', () => {
+test('mono preserves fractional mark coverage without an opaque background', () => {
   const black = { width: 4, height: 1, data: new Uint8ClampedArray([0,0,0,4, 0,0,0,0, 255,255,255,255, 0,0,0,255]) };
   const [mono] = separate(black, { inkMode: 'mono', inks: ['#000000'] }, view, true);
   assert.deepEqual([...mono.data], [4, 0, 0, 255]);
-  const layers = separate(black, { inkMode: 'cmyk', gcr: 1 }, view, true);
-  assert.deepEqual([...layers.find(layer => layer.name === 'K').data], [4, 0, 0, 255]);
-  for (const layer of layers.filter(layer => layer.name !== 'K')) assert.deepEqual([...layer.data], [0, 0, 0, 0]);
 });
 
 test('AM screening rejects an invalid frequency instead of exporting blank or solid films', () => {

@@ -6,9 +6,6 @@
 
 import { hexToRgb } from './render.js';
 
-const CMYK_ANGLES = { C: 15, M: 75, Y: 0, K: 45 };
-const CMYK_INKS = { C: '#00a0e9', M: '#e4007f', Y: '#fff100', K: '#1a1a1a' };
-
 export function separate(img, p, view, simulate) {
   const { data, width: w, height: h } = img;
   const n = w * h;
@@ -20,26 +17,7 @@ export function separate(img, p, view, simulate) {
     if (p.spotMethod === 'dither') ditherToPalette(data, view, inks, paper, masks);
     else nearestToPalette(data, view, inks, paper, masks, simulate);
     // Name by position only, so editing an ink color keeps the selected preview film.
-    return masks.map((m, i) => ({ name: `ink${i + 1}`, file: `ink${i + 1}-${p.inks[i].slice(1)}`, ink: inks[i], data: m }));
-  }
-
-  if (p.inkMode === 'cmyk') {
-    const ch = { C: new Uint8Array(n), M: new Uint8Array(n), Y: new Uint8Array(n), K: new Uint8Array(n) };
-    for (let i = 0, o = 0; i < n; i++, o += 4) {
-      const alpha = data[o + 3] / 255;
-      const c = 1 - data[o] / 255, m = 1 - data[o + 1] / 255, y = 1 - data[o + 2] / 255;
-      const k = Math.min(c, m, y) * p.gcr;
-      const d = 1 - k || 1;
-      ch.C[i] = 255 * (c - k) / d * alpha;
-      ch.M[i] = 255 * (m - k) / d * alpha;
-      ch.Y[i] = 255 * (y - k) / d * alpha;
-      ch.K[i] = 255 * k * alpha;
-    }
-    return Object.keys(ch).map((key, c) => ({
-      name: key,
-      ink: hexToRgb(CMYK_INKS[key]),
-      data: simulate ? ch[key] : screen(ch[key], CMYK_ANGLES[key], p, view, c),
-    }));
+    return masks.map((m, i) => ({ name: `ink${i + 1}`, hex: p.inks[i].slice(1), ink: inks[i], data: m }));
   }
 
   // mono
@@ -56,7 +34,7 @@ export function separate(img, p, view, simulate) {
 
 /* ---------- screening (coverage -> 0/255) ---------- */
 
-function screen(cov, angleDeg, p, view, channel = 0) {
+function screen(cov, angleDeg, p, view) {
   const { w, h } = view;
   const out = new Uint8Array(w * h);
 
@@ -68,13 +46,11 @@ function screen(cov, angleDeg, p, view, channel = 0) {
   if (p.screen === 'fs') {
     // Stochastic (FM) screen: a dispersed noise threshold in absolute sheet
     // pixels. Unlike error diffusion it does not depend on where a crop starts.
-    // Each process channel uses a shifted pattern so inks do not stack.
-    const sx = channel * 37, sy = channel * 71;
     for (let y = 0; y < h; y++) {
-      const Y = y + view.y0 + sy;
+      const Y = y + view.y0;
       for (let x = 0; x < w; x++) {
         const i = y * w + x;
-        if (cov[i] > threshold(x + view.x0 + sx, Y)) out[i] = 255;
+        if (cov[i] > threshold(x + view.x0, Y)) out[i] = 255;
       }
     }
     return out;

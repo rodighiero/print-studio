@@ -11,8 +11,17 @@
   <form id="controls" class="studio" autocomplete="off">
     <!-- The sheet fills the window between the two floating panel columns. -->
     <main id="sheet" aria-label="Print sheet" aria-busy="true">
+      <!-- The film bleed around the sheet, with its registration marks, when Bleed is on. -->
+      <canvas id="bleed" hidden aria-hidden="true"></canvas>
       <canvas id="preview" tabindex="0" role="img" aria-label="Print sheet. Drag to move the map. Use plus and minus to zoom. Press I to inspect, move the square to explore, and click or press Enter to select an area. Press Escape to return to dragging."></canvas>
       <div id="inspection-area" hidden aria-hidden="true"></div>
+      <!-- Fine guide: thin lines every 50 mm from the sheet centre. Below the thirds grid. Never printed. -->
+      <svg id="sheet-grid-fine" preserveAspectRatio="none" hidden aria-hidden="true"><path/></svg>
+      <!-- Composition guide on the sheet: centre cross and thirds. Never printed. -->
+      <svg id="sheet-grid" viewBox="0 0 100 100" preserveAspectRatio="none" hidden aria-hidden="true">
+        <path class="thirds" d="M33.333 0V100M66.667 0V100M0 33.333H100M0 66.667H100"/>
+        <path class="centre" d="M50 0V100M0 50H100"/>
+      </svg>
     </main>
 
     <!-- Two columns at the window sides leave the full height to the sheet. -->
@@ -30,6 +39,29 @@
             </select>
             <a class="external" href="https://github.com/rodighiero/surprise-machines" target="_blank" rel="noopener">Source</a>
           </fieldset>
+          <fieldset class="group"><legend>Dot size</legend>
+            <div class="size-row">
+              <div class="field">
+                <span class="size-choice"><input type="checkbox" checked disabled aria-label="Size 1 is always exported"><label class="radio-option"><input type="radio" name="sizePreview" value="1" checked><span>Size 1</span></label></span>
+                <output id="mark-size-1-level">100%</output>
+              </div>
+              <input class="zoom-slider" type="range" name="markSize" aria-label="Dot size 1" min="0.25" max="4" step="0.05" value="1">
+            </div>
+            <div class="size-row">
+              <div class="field">
+                <span class="size-choice"><input type="checkbox" name="sizeOn2" aria-label="Export size 2"><label class="radio-option"><input type="radio" name="sizePreview" value="2"><span>Size 2</span></label></span>
+                <output id="mark-size-2-level">75%</output>
+              </div>
+              <input class="zoom-slider" type="range" name="markSize2" aria-label="Dot size 2" min="0.25" max="4" step="0.05" value="0.75" data-show="sizeOn2=true">
+            </div>
+            <div class="size-row">
+              <div class="field">
+                <span class="size-choice"><input type="checkbox" name="sizeOn3" aria-label="Export size 3"><label class="radio-option"><input type="radio" name="sizePreview" value="3"><span>Size 3</span></label></span>
+                <output id="mark-size-3-level">150%</output>
+              </div>
+              <input class="zoom-slider" type="range" name="markSize3" aria-label="Dot size 3" min="0.25" max="4" step="0.05" value="1.5" data-show="sizeOn3=true">
+            </div>
+          </fieldset>
         </fieldset>
       </aside>
       <!-- The composition: what is printed and where -->
@@ -40,20 +72,19 @@
               <label class="radio-option"><input type="radio" name="sheet" value="420x594" checked><span>A2</span></label>
               <label class="radio-option"><input type="radio" name="sheet" value="297x420"><span>A3</span></label>
             </div>
-            <div class="field">
-              <span>Zoom</span>
-              <div class="zoom-controls">
+          </fieldset>
+          <fieldset class="group"><legend class="legend-row">Zoom
+              <span class="zoom-controls legend-value">
                 <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
                 <output id="zoom-level" aria-label="Map zoom">160%</output>
                 <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
-              </div>
-            </div>
-            <input class="zoom-slider" type="range" name="zoom" aria-label="Map zoom" min="1" max="2.5" step="any" value="1.6">
+              </span>
+            </legend>
+            <input class="zoom-slider" type="range" name="zoom" aria-label="Map zoom" min="1" max="5" step="any" value="1.6">
           </fieldset>
-          <fieldset class="group"><legend>Position</legend>
+          <fieldset class="group"><legend class="legend-row">Position <button type="button" id="reset-position" class="legend-action" title="Return to the original project center">Reset</button></legend>
             <div class="field"><span id="offset-x-label">Offset X</span><span><output name="offsetX" aria-labelledby="offset-x-label">0</output> mm</span></div>
             <div class="field"><span id="offset-y-label">Offset Y</span><span><output name="offsetY" aria-labelledby="offset-y-label">0</output> mm</span></div>
-            <button type="button" id="reset-position" class="action-button">Reset position</button>
           </fieldset>
         </fieldset>
       </aside>
@@ -68,24 +99,18 @@
           </fieldset>
         </fieldset>
       </aside>
-      <figure id="loupe" class="card panel" aria-label="Inspect">
-        <div class="inspect-heading">
-          <span>Inspect</span>
-        </div>
-        <canvas width="600" height="600" role="img" aria-label="Selected area at export resolution"></canvas>
-        <figcaption>Loading detail…</figcaption>
-        <button type="button" id="inspect" class="action-button" aria-pressed="false" aria-controls="preview" aria-describedby="inspect-help" disabled>Inspect image</button>
-        <p id="inspect-help" class="inspect-hint" hidden>Move the square to inspect. Click to select an area. Escape cancels.</p>
-      </figure>
     </div>
     <div class="column" id="column-right">
+      <figure id="loupe" class="card panel" aria-label="Inspect">
+        <div class="panel-title legend-row">Inspect <button type="button" id="inspect" class="legend-action" aria-pressed="false" aria-controls="preview" aria-describedby="inspect-help" title="Choose an area of the sheet to inspect (I)" disabled>Select area</button></div>
+        <canvas width="600" height="600" role="img" aria-label="Selected area at export resolution"></canvas>
+        <figcaption>Loading detail…</figcaption>
+        <p id="inspect-help" class="inspect-hint" hidden>Move the square to inspect. Click to select an area. Escape cancels.</p>
+      </figure>
       <!-- Preview controls, inks, separation and screening settings -->
       <aside id="panel-preview" class="card panel" aria-label="Preview">
         <fieldset class="panel-settings" disabled>
-          <fieldset class="group"><legend>Preview</legend>
-            <label class="field toggle-field">Print preview <input type="checkbox" name="printPreview" checked aria-controls="preview view"></label>
-          </fieldset>
-          <fieldset class="group"><legend>Inks</legend>
+          <fieldset class="group"><legend class="legend-row">Inks <button type="button" id="reset-inks" class="legend-action" title="Reset ink colors to the palettes generated from the original image colors">Reset</button></legend>
             <div class="options">
               <div class="ink-option">
                 <label class="radio-option"><input type="radio" name="inkMode" value="mono" checked><span>One color</span></label>
@@ -106,7 +131,6 @@
                   <input type="color" aria-label="Three-color palette ink 3" name="spot3Ink3" value="#000000">
                 </div>
               </div>
-              <label class="radio-option"><input type="radio" name="inkMode" value="cmyk"><span>CMYK</span></label>
             </div>
           </fieldset>
           <fieldset class="group" data-show="inkMode=spot2,spot3"><legend>Separation</legend>
@@ -121,30 +145,19 @@
           <fieldset class="group" id="view"><legend>Films</legend>
             <div class="options"><label class="radio-option"><input type="radio" name="previewFilm" value="composite" checked><span>Composite</span></label></div>
           </fieldset>
-          <fieldset class="group" data-show="inkMode=mono,cmyk"><legend>Screen</legend>
+          <fieldset class="group"><legend>Sheet</legend>
             <div class="options">
-              <label class="radio-option"><input type="radio" name="screen" value="am" checked><span>Halftone dots</span></label>
-              <label class="radio-option"><input type="radio" name="screen" value="lines"><span>Line screen</span></label>
-              <label class="radio-option"><input type="radio" name="screen" value="fs"><span>Stochastic</span></label>
-              <label class="radio-option"><input type="radio" name="screen" value="threshold"><span>Threshold</span></label>
+              <label class="check-option" title="Extend each film 10 mm past the sheet, with registration targets and crop marks"><input type="checkbox" name="bleed" checked><span>Bleed 10 mm</span></label>
+              <label class="check-option" title="Show center and thirds guides on the sheet (G). Guides never print."><input type="checkbox" name="grid"><span>Grid</span></label>
+              <label class="check-option" title="Show thin guides every 50 mm from the sheet center. Guides never print."><input type="checkbox" name="gridFine"><span>Grid 50 mm</span></label>
             </div>
-            <label class="field" data-show="inkMode=mono,cmyk;screen=am,lines">Frequency (lpi) <input type="number" name="lpi" value="35" min="5" max="85" step="1"></label>
-            <label class="field" data-show="inkMode=mono;screen=am,lines">Angle (°) <input type="number" name="angle" value="22.5" step="0.5"></label>
-            <label class="field" data-show="inkMode=cmyk">Black generation <input type="range" name="gcr" min="0" max="1" step="0.05" value="1"></label>
           </fieldset>
         </fieldset>
       </aside>
-      <!-- Export resolution and files -->
+      <!-- Export: films at a fixed 300 dpi -->
       <footer id="panel-output" class="card panel" aria-label="Export">
-        <fieldset class="panel-settings" disabled>
-          <fieldset class="group"><legend>Resolution (dpi)</legend>
-            <div class="options inline">
-              <label class="radio-option"><input type="radio" name="dpi" value="300" checked><span>300</span></label>
-              <label class="radio-option"><input type="radio" name="dpi" value="400"><span>400</span></label>
-            </div>
-          </fieldset>
-        </fieldset>
-        <button type="button" id="export" class="action-button action-primary" disabled title="One PNG film per ink plus a color proof">Export films &amp; proof</button>
+        <button type="button" id="export" class="action-button action-primary" disabled title="One 300 dpi PNG film per ink, for each dot size">Export films</button>
+        <ul id="file-names" class="file-names" aria-label="Files to export" hidden></ul>
         <p id="status" role="status">Loading collection…</p>
       </footer>
       <!-- Not a .panel: it must survive hiding the panels, or there is no way back. -->

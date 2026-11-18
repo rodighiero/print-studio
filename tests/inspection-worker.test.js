@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-test('inspection worker returns original colors when preview is off and real film pixels when on', async t => {
+test('inspection worker returns real film pixels and the preview keeps continuous coverage', async t => {
   const messages = [];
   const originalSelf = Object.getOwnPropertyDescriptor(globalThis, 'self');
   const originalCanvas = Object.getOwnPropertyDescriptor(globalThis, 'OffscreenCanvas');
@@ -37,10 +37,7 @@ test('inspection worker returns original colors when preview is off and real fil
     assert.ok(!result.error, result.error);
     return result.preview;
   };
-  const original = await render({ type: 'inspect', printPreview: false });
-  assert.deepEqual(original.design.data, rgba);
-  assert.equal(original.layers.length, 0);
-  const detail = await render({ type: 'inspect', printPreview: true });
+  const detail = await render({ type: 'inspect' });
   assert.ok([...detail.layers[0].data].every(value => value === 0 || value === 255));
   const preview = await render({});
   assert.equal(preview.layers[0].data[0], 64);

@@ -141,3 +141,13 @@ test('panel and committed defaults contain only automatic dots', () => {
   assert.ok(!html.includes('name="sizeBy"'));
   assert.equal(settings.values.sizeBy, 'constant');
 });
+
+test('mark size scales the dot diameter relative to the original', t => {
+  const original = draw(t, base, 400);
+  const doubled = draw(t, { ...base, markSize: 2 }, 400);
+  const halved = draw(t, { ...base, markSize: 0.5 }, 400);
+  for (let i = 0; i < ds.n; i++) {
+    near(doubled[i].area / original[i].area, 4);
+    near(halved[i].area / original[i].area, 0.25);
+  }
+});

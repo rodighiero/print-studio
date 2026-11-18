@@ -21,10 +21,9 @@ self.onmessage = async ({ data }) => {
       self.postMessage({ id, done });
       return;
     }
-    const design = renderDesign(dataset, positions, p, view);
-    const layers = data.type === 'inspect' && !data.printPreview
-      ? [] : separate(design, p, view, data.type !== 'inspect');
-    self.postMessage({ id, preview: { design, layers } }, [design.data.buffer, ...layers.map(layer => layer.data.buffer)]);
+    // Inspection shows real film pixels; the sheet preview keeps continuous coverage.
+    const layers = separate(renderDesign(dataset, positions, p, view), p, view, data.type !== 'inspect');
+    self.postMessage({ id, preview: { layers } }, layers.map(layer => layer.data.buffer));
   } catch (error) {
     self.postMessage({ id, error: error.message });
   }

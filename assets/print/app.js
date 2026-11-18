@@ -4,12 +4,13 @@ import { inspectionView } from './inspection.js';
 import { extractPalette } from './palette.js';
 import { contrastPalette } from './palette-contrast.js';
 import { loadDataset } from './data.js';
-import { renderDesign, fullView, filmView } from './render.js';
-import { separate, composite, film } from './separate.js';
-import { renderFilms, chooseSaver } from './export.js';
+import { renderDesign, fullView, filmView, layoutCentre } from './render.js';
+import { separate, composite, film, addMarks } from './separate.js';
+import { renderFilms, chooseSaver, filmFileName } from './export.js';
 
 const PREVIEW_DPI = 60;
-const LOUPE_PX = 600;
+// Films are always 300 dpi; dot sizes, not resolution, vary between exports.
+const EXPORT_DPI = 300;
 const SETTINGS_KEY = 'surprise-machines.print-studio.settings.v1';
 const settingDefaults = { ...projectSettings.values };
 const spotColorOverrides = new Set();
@@ -27,15 +28,29 @@ const loupeCanvas = loupe.querySelector('canvas');
 const loupeCaption = loupe.querySelector('figcaption');
 const inspectButton = document.getElementById('inspect');
 const inspectionArea = document.getElementById('inspection-area');
+const sheetGrid = document.getElementById('sheet-grid');
+const sheetGridFine = document.getElementById('sheet-grid-fine');
+const FINE_GRID_MM = 50;
+const bleedCanvas = document.getElementById('bleed');
 const inspectHelp = document.getElementById('inspect-help');
+// The loupe shows the sheet at actual size: the canvas's on-screen width,
+// in CSS inches (96 CSS px each), sets how much of the sheet it covers.
+// Before layout (width 0) it falls back to the panel's usual 178 px.
+const CSS_PX_PER_INCH = 96;
+function loupeSize(p) {
+  const width = loupeCanvas.getBoundingClientRect().width || 178;
+  return Math.max(16, Math.round(width / CSS_PX_PER_INCH * p.dpi));
+}
 
 let ds = null;
-let last = null;        // { p, view, layers, design } of the current preview
+let last = null;        // { p, view, layers } of the current preview
 let loupeCentre = [0.5, 0.5]; // selected center as fractions of sheet width/height
 let inspectionPointer = false;
 let inspectionPanelHover = false;
 let inspectionFrame = null;
 let selectedCentre = [...loupeCentre];
+let imageCentre; // layout centre of the image, set once the layout loads
+let restorePanelsHidden = false; // set by applySettings, applied once the page is ready
 let busy = false;
 let tool = 'move';
 let drag = null;
@@ -95,8 +110,7 @@ async function renderPreview(xy, p, view, id) {
     if (previewWorker.ok) throw error; // a render error, not a worker failure
     console.warn('Preview worker unavailable, rendering on the main thread.', error);
   }
-  const design = renderDesign(ds, xy, p, view);
-  return { design, layers: separate(design, p, view, true) };
+  return { layers: separate(renderDesign(ds, xy, p, view), p, view, true) };
 }
 let selectedView = 'composite';
 // Keep calibration independent of the current window or preview size.
@@ -121,7 +135,10 @@ function saveSettings() {
     const calibration = {};
     if (referenceHeight !== projectSettings.referenceHeight) calibration.referenceHeight = referenceHeight;
     if (referencePixelRatio !== projectSettings.referencePixelRatio) calibration.referencePixelRatio = referencePixelRatio;
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ values, ...calibration, view: selectedView, positionVersion: 2, zoomRangeVersion: 2 }));
+    // While choosing an area, keep the last committed one; a cancel returns to it.
+    const inspect = tool === 'inspect' ? selectedCentre : loupeCentre;
+    const panelsHidden = document.body.classList.contains('chrome-hidden');
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ values, ...calibration, view: selectedView, inspect, panelsHidden, positionVersion: 3, zoomRangeVersion: 2 }));
   } catch {
     // Saving is optional when browser storage is unavailable.
   }
@@ -164,15 +181,21 @@ function applySettings(saved) {
     if (Number.isFinite(storedRatio) && storedRatio >= 0.5 && storedRatio <= 8) {
       referencePixelRatio = storedRatio;
     }
-    // Re-center older saved positions on the original app camera target once.
+    // Re-centre older saved positions once: offsets are now relative to the image centre.
     // Later saves retain manual positioning across refreshes.
-    if (saved.positionVersion !== 2) {
+    if (saved.positionVersion !== 3) {
       form.elements.offsetX.value = '0';
       form.elements.offsetY.value = '0';
     }
     // Move older saves to the current default zoom once; retain later user choices.
     if (saved.zoomRangeVersion !== 2) form.elements.zoom.value = projectSettings.values.zoom;
     if (typeof saved.view === 'string') selectedView = saved.view;
+    const inspect = saved.inspect;
+    if (Array.isArray(inspect) && inspect.length === 2 && inspect.every((v) => Number.isFinite(v) && v >= 0 && v <= 1)) {
+      loupeCentre = [...inspect];
+      selectedCentre = [...inspect];
+    }
+    if (saved.panelsHidden === true) restorePanelsHidden = true;
   } catch {
     // Missing, outdated or unavailable storage must never prevent startup.
   }
@@ -201,6 +224,44 @@ function initializeSpotPalettes() {
   saveSettings();
 }
 
+const percent = (value) => `${Math.round(Number(value) * 100)}%`;
+// Dot sizes: size 1 is always exported; sizes 2 and 3 are optional extra sets.
+// The selected (bulleted) size is the one shown in the preview.
+const sizeName = (i) => (i === 1 ? 'markSize' : `markSize${i}`);
+const sizeRadio = (i) => form.querySelector(`input[name="sizePreview"][value="${i}"]`);
+const sizeValue = (i) => clampNum(parseFloat(form.elements[sizeName(i)].value), 0.25, 4, 1);
+// Sizes to export; a size equal to an earlier one is skipped, since it would write the same files.
+const enabledSizes = () => [1, 2, 3]
+  .filter((i) => i === 1 || form.elements[`sizeOn${i}`].checked)
+  .filter((i, n, sizes) => sizes.findIndex((j) => Math.round(sizeValue(j) * 100) === Math.round(sizeValue(i) * 100)) === n);
+// Export parameters for size i; with several sizes, files carry the dot size percentage.
+function sizedParams(p, i, sizes) {
+  const markSize = sizeValue(i);
+  return { ...p, markSize, fileTag: sizes.length > 1 ? `dot-${Math.round(markSize * 100)}` : undefined };
+}
+// List the files the next export will write, below the Export button.
+const fileNames = document.getElementById('file-names');
+function syncFileNames() {
+  if (!last) return;
+  const p = readParams();
+  const sizes = enabledSizes();
+  const names = sizes.flatMap((i) => last.layers.map((layer, n) => filmFileName(sizedParams(p, i, sizes), layer, n)));
+  fileNames.replaceChildren(...names.map((name) => Object.assign(document.createElement('li'), { textContent: name })));
+  fileNames.hidden = false;
+}
+function syncSizes() {
+  for (const i of [1, 2, 3]) document.getElementById(`mark-size-${i}-level`).value = percent(form.elements[sizeName(i)].value);
+  for (const i of [2, 3]) {
+    const radio = sizeRadio(i);
+    radio.disabled = !form.elements[`sizeOn${i}`].checked;
+    if (radio.disabled && radio.checked) sizeRadio(1).checked = true;
+  }
+}
+// Moving a slider or enabling a size previews it.
+function previewSize(target) {
+  const i = { markSize: 1, markSize2: 2, markSize3: 3, sizeOn2: 2, sizeOn3: 3 }[target.name];
+  if (i && !sizeRadio(i).disabled) sizeRadio(i).checked = true;
+}
 function syncZoom() {
   const zoom = form.elements.zoom;
   zoomLevel.value = `${Math.round(Number(zoom.value) * 100)}%`;
@@ -218,8 +279,9 @@ function setTool(next, cancel = false) {
   }
   tool = next;
   preview.dataset.tool = next;
+  saveSettings(); // keep the chosen inspection area
   inspectButton.setAttribute('aria-pressed', String(next === 'inspect'));
-  inspectButton.textContent = next === 'inspect' ? 'Cancel inspection' : 'Inspect image';
+  inspectButton.textContent = next === 'inspect' ? 'Cancel' : 'Select area';
   inspectHelp.hidden = next !== 'inspect';
   if (next !== 'inspect') inspectionPointer = false;
   drawLoupeOutline();
@@ -239,7 +301,16 @@ function stepZoom(step) {
   const next = Math.round((Number(form.elements.zoom.value) + step) * 1e10) / 1e10;
   zoomMap(next);
 }
-// Offsets are 0 when the sheet is centered on the original camera target.
+// Restore every ink to its default: spot palettes regenerate from the original image colors.
+document.getElementById('reset-inks').addEventListener('click', () => {
+  if (!palettesReady) return;
+  for (const el of form.elements) {
+    if (isSpotColor(el.name) || el.name === 'monoInk') el.value = settingDefaults[el.name];
+  }
+  spotColorOverrides.clear();
+  schedule();
+});
+// Offsets are 0 when the image centre sits on the sheet centre.
 const resetPositionBtn = document.getElementById('reset-position');
 function syncPosition() {
   resetPositionBtn.disabled = Number(form.elements.offsetX.value) === 0 && Number(form.elements.offsetY.value) === 0;
@@ -279,31 +350,35 @@ function readParams() {
     render: 'dots',
     referenceHeight,
     referencePixelRatio,
+    centre: imageCentre,
     colorBy: el.colorBy.value,
     sizeBy: 'constant',
+    markSize: sizeValue(Number(el.sizePreview.value) || 1),
     inkMode,
     inks,
     paper: el.paper.value,
     spotMethod: el.spotMethod.value,
-    screen: el.screen.value,
-    lpi: clampNum(num('lpi'), 5, 85, 35),
-    angle: Number.isFinite(num('angle')) ? num('angle') : 22.5,
-    gcr: num('gcr'),
-    dpi: num('dpi'),
+    // Tiny marks are screened stochastically: AM cells would break them apart.
+    screen: 'fs',
+    dpi: EXPORT_DPI,
+    bleed: el.bleed.checked,
   };
 }
 
-// data-show="inkMode=mono,cmyk;screen=am,lines" -> visible when every clause matches
+// data-show="inkMode=spot2,spot3" -> visible when every clause matches
 function updateVisibility() {
-  viewGroup.hidden = !form.elements.printPreview.checked;
   form.querySelectorAll('[data-show]').forEach((node) => {
     const ok = node.dataset.show.split(';').every((clause) => {
       const [name, values] = clause.split('=');
-      return values.split(',').includes(form.elements[name].value);
+      const el = form.elements[name];
+      return values.split(',').includes(el.type === 'checkbox' ? String(el.checked) : el.value);
     });
     node.hidden = !ok;
   });
 }
+
+// Layers are named "ink" (one color) or "ink1", "ink2"… (spot colors).
+const filmLabel = (name) => name === 'composite' ? 'Composite' : name.replace(/^ink(\d*)$/, (_, n) => n ? `Ink ${n}` : 'Ink');
 
 function populateViews(layers) {
   const current = selectedView;
@@ -320,7 +395,7 @@ function populateViews(layers) {
     input.value = value;
     input.checked = value === selectedView;
     const text = document.createElement('span');
-    text.textContent = value === 'composite' ? 'Composite' : `Film ${value}`;
+    text.textContent = filmLabel(value);
     label.append(input, text);
     return label;
   });
@@ -334,34 +409,94 @@ function viewImage(layers, p, w, h, which = selectedView) {
 
 function drawPreview() {
   if (!last) return;
-  const { p, view, layers, design } = last;
-  const printPreview = form.elements.printPreview.checked;
+  const { p, view, layers } = last;
   preview.width = view.w;
   preview.height = view.h;
   const ctx = preview.getContext('2d');
-  const image = printPreview ? viewImage(layers, p, view.w, view.h) : design;
+  const image = viewImage(layers, p, view.w, view.h);
   previewSnapshot.width = view.w;
   previewSnapshot.height = view.h;
   const snapshotCtx = previewSnapshot.getContext('2d');
   snapshotCtx.putImageData(image, 0, 0);
-  if (!printPreview) {
-    snapshotCtx.globalCompositeOperation = 'destination-over';
-    snapshotCtx.fillStyle = p.paper;
-    snapshotCtx.fillRect(0, 0, view.w, view.h);
-    snapshotCtx.globalCompositeOperation = 'source-over';
-  }
   ctx.drawImage(previewSnapshot, 0, 0);
-  const label = !printPreview ? 'Original design'
-    : selectedView === 'composite' ? 'Print preview · Smooth proof' : `Print preview · Film ${selectedView}`;
+  const label = selectedView === 'composite' ? 'Composite of all inks' : `${filmLabel(selectedView)} film`;
   document.getElementById('sheet').setAttribute('aria-label', label);
+  drawGrid();
+  drawBleed();
   drawLoupeOutline();
+}
+
+// The grid guides cover the sheet canvas exactly; they are overlays, so they never reach the films.
+// The two grids are independent and can be shown together.
+function drawGrid() {
+  const rect = preview.getBoundingClientRect();
+  const frame = preview.parentElement.getBoundingClientRect();
+  const place = (svg, on) => {
+    // An SVG element has no .hidden property; toggle the attribute instead.
+    svg.toggleAttribute('hidden', !last || !on);
+    if (!last || !on) return false;
+    Object.assign(svg.style, {
+      left: `${rect.left - frame.left}px`, top: `${rect.top - frame.top}px`,
+      width: `${rect.width}px`, height: `${rect.height}px`,
+    });
+    return true;
+  };
+  place(sheetGrid, form.elements.grid.checked);
+  if (place(sheetGridFine, form.elements.gridFine.checked)) {
+    // Drawn in sheet millimetres, from the centre outwards.
+    const [W, H] = readParams().sheet;
+    const lines = (length, step) => {
+      const out = [];
+      for (let d = 0; length / 2 + d < length; d += step) out.push(length / 2 + d, ...(d ? [length / 2 - d] : []));
+      return out;
+    };
+    const d = [
+      ...lines(W, FINE_GRID_MM).map((x) => `M${x} 0V${H}`),
+      ...lines(H, FINE_GRID_MM).map((y) => `M0 ${y}H${W}`),
+    ].join('');
+    sheetGridFine.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    sheetGridFine.firstElementChild.setAttribute('d', d);
+  }
+}
+
+// Show the film bleed around the sheet: the same marks as the films, drawn at
+// screen resolution behind the sheet canvas, which covers everything but the band.
+let bleedKey = '';
+function drawBleed() {
+  const p = last && readParams();
+  bleedCanvas.hidden = !p || !p.bleed;
+  if (bleedCanvas.hidden) return;
+  const rect = preview.getBoundingClientRect();
+  const frame = preview.parentElement.getBoundingClientRect();
+  const cssPerMm = rect.width / p.sheet[0];
+  const view = filmView(p, cssPerMm * 25.4 * (window.devicePixelRatio || 1));
+  // Redraw the marks only when the band's pixel size changes (format, window size, zoom level of the page).
+  const key = `${view.w}x${view.h}`;
+  if (key !== bleedKey) {
+    bleedKey = key;
+    const marks = { data: new Uint8Array(view.w * view.h) };
+    addMarks([marks], view);
+    bleedCanvas.width = view.w;
+    bleedCanvas.height = view.h;
+    const image = new ImageData(view.w, view.h);
+    for (let i = 0, o = 0; i < marks.data.length; i++, o += 4) {
+      // Only the marks: the band itself stays the page background.
+      if (marks.data[i]) image.data.set([30, 30, 30, 230], o);
+    }
+    bleedCanvas.getContext('2d').putImageData(image, 0, 0);
+  }
+  const scale = rect.width / view.trim.w;
+  Object.assign(bleedCanvas.style, {
+    left: `${rect.left - frame.left + view.x0 * scale}px`, top: `${rect.top - frame.top + view.y0 * scale}px`,
+    width: `${view.w * scale}px`, height: `${view.h * scale}px`,
+  });
 }
 
 function drawLoupeOutline() {
   inspectionArea.hidden = !last || (!inspectionPanelHover && (tool !== 'inspect' || !inspectionPointer));
   if (inspectionArea.hidden) return;
   const p = readParams();
-  const view = inspectionView(p, loupeCentre, LOUPE_PX);
+  const view = inspectionView(p, loupeCentre, loupeSize(p));
   const sheet = fullView(p, p.dpi);
   const rect = preview.getBoundingClientRect();
   const frame = preview.parentElement.getBoundingClientRect();
@@ -383,16 +518,16 @@ async function update() {
   const xy = await ds.layout(p.layout);
   if (request !== revision) return;
   const view = fullView(p, PREVIEW_DPI);
-  const { layers, design } = await renderPreview(xy, p, view, request);
+  const { layers } = await renderPreview(xy, p, view, request);
   if (request !== revision) return;
-  last = { p, view, layers, design };
+  last = { p, view, layers };
   populateViews(layers);
+  syncFileNames();
   drawPreview();
   if (loupeCentre) await renderLoupe();
   if (request !== revision) return;
   const exportPx = filmView(p, p.dpi);
-  previewStatus(`${ds.n.toLocaleString()} images · ${layers.length} screen${layers.length > 1 ? 's' : ''} · `
-    + `films ${exportPx.w} × ${exportPx.h} px incl. bleed`);
+  previewStatus(`${exportPx.w} × ${exportPx.h} px`);
 }
 
 let loupeRevision = 0;
@@ -413,13 +548,12 @@ async function renderLoupe(moving = false) {
       const request = loupeRevision;
       const epoch = loupeEpoch;
       const p = readParams();
-      const view = inspectionView(p, loupeCentre, LOUPE_PX);
-      const printPreview = form.elements.printPreview.checked;
+      const view = inspectionView(p, loupeCentre, loupeSize(p));
       const which = selectedView;
       let result;
       try {
         if (inspectionWorker.ok) result = await inspectionWorker.request({
-          type: 'inspect', id: request, p, view, printPreview,
+          type: 'inspect', id: request, p, view,
         });
       } catch (error) {
         if (inspectionWorker.ok) throw error;
@@ -429,21 +563,13 @@ async function renderLoupe(moving = false) {
       if (!result) {
         const xy = await ds.layout(p.layout);
         if (epoch !== loupeEpoch) continue;
-        const design = renderDesign(ds, xy, p, view);
-        result = { design, layers: printPreview ? separate(design, p, view, false) : [] };
+        result = { layers: separate(renderDesign(ds, xy, p, view), p, view, false) };
       }
-      const { design, layers } = result;
-      const image = printPreview ? viewImage(layers, p, view.w, view.h, which) : design;
-      const ctx = loupeCanvas.getContext('2d');
-      ctx.putImageData(image, 0, 0);
-      if (!printPreview) {
-        ctx.globalCompositeOperation = 'destination-over';
-        ctx.fillStyle = p.paper;
-        ctx.fillRect(0, 0, view.w, view.h);
-        ctx.globalCompositeOperation = 'source-over';
-      }
-      const mm = (LOUPE_PX / p.dpi * 25.4).toFixed(0);
-      loupeCaption.textContent = `${mm} × ${mm} mm at ${p.dpi} dpi`;
+      if (loupeCanvas.width !== view.w) loupeCanvas.width = view.w;
+      if (loupeCanvas.height !== view.h) loupeCanvas.height = view.h;
+      loupeCanvas.getContext('2d').putImageData(viewImage(result.layers, p, view.w, view.h, which), 0, 0);
+      const mm = (view.w / p.dpi * 25.4).toFixed(0);
+      loupeCaption.textContent = `${mm} × ${mm} mm · actual size · ${p.dpi} dpi`;
       loupe.hidden = false;
     }
   } catch (error) {
@@ -477,7 +603,7 @@ function motionPreview() {
     motionFrame = null;
     const p = readParams();
     if (p.sheet.join() !== last.p.sheet.join()) return;
-    const background = form.elements.printPreview.checked && last.layers.some(layer => layer.name === selectedView) ? '#ffffff' : last.p.paper;
+    const background = last.layers.some(layer => layer.name === selectedView) ? '#ffffff' : last.p.paper;
     drawMotionPreview(preview.getContext('2d'), previewSnapshot, last.p, p, background);
     drawLoupeOutline();
   });
@@ -508,15 +634,11 @@ window.addEventListener('pagehide', saveSettings);
 
 form.addEventListener('input', (e) => {
   if (e.target.name === 'previewFilm') return;
-  if (e.target.name === 'printPreview') {
-    updateVisibility();
-    saveSettings();
-    drawPreview();
-    if (loupeCentre) renderLoupe();
-    return;
-  }
+  if (e.target.name === 'grid' || e.target.name === 'gridFine') { drawGrid(); saveSettings(); return; }
   updateVisibility();
   syncZoom();
+  syncSizes();
+  previewSize(e.target);
   schedule(e.target.name === 'zoom');
 });
 viewGroup.addEventListener('change', (event) => {
@@ -570,7 +692,13 @@ preview.addEventListener('pointerleave', () => {
   inspectionPointer = false;
   drawLoupeOutline();
 });
-window.addEventListener('resize', () => drawLoupeOutline());
+// A wider or narrower loupe covers more or less of the sheet, still at actual size.
+window.addEventListener('resize', () => {
+  drawGrid();
+  drawBleed();
+  drawLoupeOutline();
+  if (loupeCentre && last && loupeCanvas.width !== loupeSize(readParams())) renderLoupe();
+});
 function endDrag(pointerId) {
   if (!drag || pointerId !== drag.id) return;
   drag = null;
@@ -599,7 +727,7 @@ preview.addEventListener('keydown', (event) => {
     const p = readParams();
     const axis = ['ArrowLeft', 'ArrowRight'].includes(event.key) ? 0 : 1;
     const sign = ['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1;
-    const crop = inspectionView(p, loupeCentre, LOUPE_PX);
+    const crop = inspectionView(p, loupeCentre, loupeSize(p));
     const full = fullView(p, p.dpi);
     loupeCentre = [(crop.x0 + crop.w / 2) / full.w, (crop.y0 + crop.h / 2) / full.h];
     loupeCentre[axis] = Math.max(0, Math.min(1, loupeCentre[axis] + sign * (event.shiftKey ? 5 : 1) / p.sheet[axis]));
@@ -618,13 +746,20 @@ function toggleChrome() {
   const hidden = document.body.classList.toggle('chrome-hidden');
   if (hidden) inspectionPanelHover = false;
   chromeToggle.textContent = hidden ? 'Show panels' : 'Hide panels';
+  drawGrid();
+  drawBleed();
   drawLoupeOutline();
+  saveSettings();
 }
 chromeToggle.addEventListener('click', toggleChrome);
 document.addEventListener('keydown', (event) => {
-  if (event.key.toLowerCase() !== 'h' || event.metaKey || event.ctrlKey || event.altKey) return;
+  const key = event.key.toLowerCase();
+  if (!['h', 'g'].includes(key) || event.metaKey || event.ctrlKey || event.altKey) return;
   if (event.target.closest?.('input:not([type=radio]), textarea, select')) return;
-  toggleChrome();
+  if (key === 'h') { toggleChrome(); return; }
+  form.elements.grid.checked = !form.elements.grid.checked;
+  drawGrid();
+  saveSettings();
 });
 
 let exportId = 0;
@@ -644,16 +779,24 @@ exportBtn.addEventListener('click', async () => {
       writes.push(write);
       return write;
     };
+    const sizes = enabledSizes();
     let count;
-    if (exportWorker.ok) {
-      count = await exportWorker.request({ type: 'export', id: ++exportId, p, view }, { progress: status, file });
-    } else {
-      const xy = await ds.layout(p.layout);
-      count = await renderFilms(ds, xy, p, view, { progress: async (msg) => { status(msg); await tick(); }, file });
+    for (const [n, i] of sizes.entries()) {
+      const sized = sizedParams(p, i, sizes);
+      const { markSize } = sized;
+      const progress = (msg) => status(sizes.length > 1 ? `Size ${i} (${n + 1}/${sizes.length}, ${percent(markSize)}) · ${msg}` : msg);
+      if (exportWorker.ok) {
+        count = await exportWorker.request({ type: 'export', id: ++exportId, p: sized, view }, { progress, file });
+      } else {
+        const xy = await ds.layout(p.layout);
+        count = await renderFilms(ds, xy, sized, view, { progress: async (msg) => { progress(msg); await tick(); }, file });
+      }
+      if (writeError) break;
     }
     await Promise.all(writes);
     if (writeError) throw writeError;
-    status(`Exported ${count} film${count > 1 ? 's' : ''} + proof at ${p.dpi} dpi (${view.w} × ${view.h} px with registration bleed).`);
+    const sets = sizes.length > 1 ? `${sizes.length} dot sizes × ` : '';
+    status(`Exported ${sets}${count} film${count > 1 ? 's' : ''} at ${p.dpi} dpi (${view.w} × ${view.h} px${p.bleed ? ' with registration bleed' : ''}).`);
   } catch (err) {
     console.error(err);
     if (err.name !== 'AbortError') status(`Export failed: ${err.message}`);
@@ -665,15 +808,18 @@ exportBtn.addEventListener('click', async () => {
 });
 
 restoreSettings();
+if (restorePanelsHidden) toggleChrome();
 syncPosition();
 updateVisibility();
 syncZoom();
+syncSizes();
 setTool('move');
 loadDataset(status)
   .then(async (data) => {
     ds = data;
     initializeSpotPalettes();
     const positions = await ds.layout('umap');
+    imageCentre = layoutCentre(positions);
     const { n, meanCellArea, pointSizes, css, lum } = ds;
     const init = { type: 'init', dataset: { n, meanCellArea, pointSizes, css, lum }, positions };
     previewWorker.init(init);

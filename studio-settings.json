@@ -1,27 +1,30 @@
 {
   "values": {
     "project": "surprise-machines",
-    "printPreview": true,
     "sheet": "420x594",
+    "grid": false,
+    "gridFine": false,
     "zoom": "1.6",
     "offsetX": "0",
     "offsetY": "0",
     "render": "dots",
     "colorBy": "image",
     "sizeBy": "constant",
+    "markSize": "1",
+    "markSize2": "0.75",
+    "markSize3": "1.5",
+    "sizeOn2": false,
+    "sizeOn3": false,
+    "sizePreview": "1",
+    "bleed": true,
     "inkMode": "mono",
     "monoInk": "#1a1a1a",
     "paper": "#f4f0e6",
-    "spotMethod": "flat",
-    "screen": "am",
-    "lpi": "35",
-    "angle": "22.5",
-    "gcr": "1",
-    "dpi": "300"
+    "spotMethod": "flat"
   },
   "referenceHeight": 949,
   "referencePixelRatio": 2,
   "view": "composite",
-  "positionVersion": 2,
+  "positionVersion": 3,
   "zoomRangeVersion": 2
 }
