@@ -47,8 +47,7 @@ test('a crop (the loupe) matches the same area of the full export for every scre
     return { width: w, height: h, data: d };
   };
   const modes = [
-    { inkMode: 'mono', inks: ['#000000'], screen: 'fs' },
-    { inkMode: 'mono', inks: ['#000000'], screen: 'am', lpi: 35, angle: 22.5 },
+    { inkMode: 'mono', inks: ['#000000'] },
     { inkMode: 'spot', spotMethod: 'dither', inks: ['#e4572e', '#1b4f9c'], paper: '#f4f0e6' },
     { inkMode: 'spot', spotMethod: 'flat', inks: ['#e4572e', '#1b4f9c'], paper: '#f4f0e6' },
   ];
@@ -96,7 +95,7 @@ test('registration marks are drawn in the bleed of every film, never on the shee
 test('transparent canvas adds no ink in mono or dithered spot output', () => {
   const blank = { width: 4, height: 1, data: new Uint8ClampedArray(16) };
   const modes = [
-    { inkMode: 'mono', inks: ['#000000'], screen: 'threshold' },
+    { inkMode: 'mono', inks: ['#000000'] },
     { inkMode: 'spot', spotMethod: 'dither', inks: ['#0000ff'] },
   ];
   for (const p of modes) {
@@ -114,13 +113,6 @@ test('mono preserves fractional mark coverage without an opaque background', () 
   assert.deepEqual([...mono.data], [4, 0, 0, 255]);
 });
 
-test('AM screening rejects an invalid frequency instead of exporting blank or solid films', () => {
-  const black = { width: 4, height: 1, data: new Uint8ClampedArray(16).fill(255) };
-  for (const lpi of [NaN, 0]) {
-    assert.throws(() => separate(black, { inkMode: 'mono', inks: ['#000000'], screen: 'am', lpi, angle: 22.5 }, view, false));
-  }
-});
-
 test('dithered spot films preserve faint colored marks instead of blending them into paper', () => {
   const w = 256, h = 256, view = { dpi: 300, x0: 0, y0: 0, w, h };
   for (const alpha of [4, 64, 191]) {
@@ -132,12 +124,10 @@ test('dithered spot films preserve faint colored marks instead of blending them 
   }
 });
 
-test('solid ink remains solid at every halftone phase', () => {
+test('solid ink remains solid everywhere in the stochastic screen', () => {
   const w = 64, h = 64;
-  for (const screen of ['am', 'lines']) {
-    const [layer] = separate(uniform(w, h, [0, 0, 0, 255]), {
-      inkMode: 'mono', inks: ['#000000'], screen, lpi: 300, angle: 0,
-    }, { dpi: 300, x0: 0, y0: 0, w, h }, false);
-    assert.ok(layer.data.every(value => value === 255));
-  }
+  const [layer] = separate(uniform(w, h, [0, 0, 0, 255]), {
+    inkMode: 'mono', inks: ['#000000'],
+  }, { dpi: 300, x0: 0, y0: 0, w, h }, false);
+  assert.ok(layer.data.every(value => value === 255));
 });

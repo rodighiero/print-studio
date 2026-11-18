@@ -7,7 +7,6 @@
     "zoom": "1.6",
     "offsetX": "0",
     "offsetY": "0",
-    "render": "dots",
     "colorBy": "image",
     "sizeBy": "constant",
     "markSize": "1",

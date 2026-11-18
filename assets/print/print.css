@@ -54,36 +54,32 @@ button {
 button:not(:disabled):hover { color: var(--hover); }
 button:disabled { opacity: 0.4; cursor: default; }
 
+/* The one main action (Export films): a solid black button. */
 .action-button {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   width: 100%; min-height: 32px; padding: 8px 10px;
-  border: 1px solid rgba(0, 0, 0, 0.22); border-radius: 3px;
-  background: rgba(255, 255, 255, 0.5); color: var(--ink);
+  border: 1px solid; border-radius: 3px;
   line-height: 1.3; text-align: center;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.action-button:not(:disabled):hover {
-  background: rgba(0, 0, 0, 0.06); border-color: var(--ink); color: var(--ink);
-}
-.action-button:not(:disabled):active { background: rgba(0, 0, 0, 0.12); }
 .action-primary { background: var(--ink); border-color: var(--ink); color: #fff; }
 .action-primary:not(:disabled):hover { background: #333; border-color: #333; color: #fff; }
 .action-primary:not(:disabled):active { background: #555; border-color: #555; }
 
-/* Radio choices: gray labels; the checked one turns black with a bullet. */
+/* Radio and checkbox choices: gray labels; the checked one turns black
+   (a radio with a bullet, a checkbox on the left of its label). */
 .options { display: flex; flex-direction: column; gap: var(--choice-gap); }
 .options.inline { flex-direction: row; flex-wrap: wrap; column-gap: 12px; }
-.radio-option {
-  position: relative; display: block; white-space: nowrap;
-  color: var(--muted); text-transform: uppercase; cursor: pointer; transition: color 0.15s ease;
-}
+.radio-option, .check-option { color: var(--muted); text-transform: uppercase; cursor: pointer; transition: color 0.15s ease; }
+.radio-option { position: relative; display: block; white-space: nowrap; }
+.check-option { display: flex; align-items: center; gap: 6px; min-height: 15px; }
 .radio-option input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
 .radio-option span::before { content: '•'; display: inline-block; width: 9px; color: transparent; }
-.radio-option:hover { color: var(--hover); }
-.radio-option:has(input:checked) { color: var(--ink); }
+.radio-option:hover, .check-option:hover { color: var(--hover); }
+.radio-option:has(input:checked), .check-option:has(input:checked) { color: var(--ink); }
 .radio-option:has(input:checked) span::before { color: inherit; }
 .radio-option:has(input:focus-visible) { outline: 1px solid var(--ink); outline-offset: 2px; }
-fieldset:disabled .radio-option { cursor: default; opacity: 0.5; }
+fieldset:disabled .radio-option, fieldset:disabled .check-option { cursor: default; opacity: 0.5; }
 
 /* ── Columns ───────────────────────────────────────────────────────────── */
 
@@ -102,17 +98,15 @@ fieldset:disabled .radio-option { cursor: default; opacity: 0.5; }
 .column > .card { padding: 18px 16px; }
 .panel-settings { display: flex; flex-direction: column; gap: var(--section-gap); }
 .group { display: flex; flex-direction: column; gap: var(--control-gap); }
-.group > legend {
-  float: left; width: 100%; margin-bottom: 0;
-  color: var(--label); font-size: 8px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-}
+.group > legend, .panel-title { color: var(--label); font-size: 8px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.group > legend { float: left; width: 100%; margin-bottom: 0; }
 .group > legend + * { clear: both; }
 /* A small text action on the right of a section title. */
 .legend-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .legend-action { font-size: inherit; font-weight: inherit; letter-spacing: inherit; }
 /* A value or control on the right of a title reads as content, not as a label. */
-.legend-value, .legend-value output, .legend-value button { font-size: 9px; font-weight: 400; letter-spacing: 0.04em; }
-.legend-value output, output.legend-value { color: var(--ink); font-variant-numeric: tabular-nums; }
+.legend-value { font-size: 9px; font-weight: 400; letter-spacing: 0.04em; }
+.legend-value output { color: var(--ink); }
 
 /* A label/value pair on one row: name left, control or value right. */
 .field {
@@ -144,10 +138,6 @@ input[type='color']::-moz-color-swatch { border: 0; border-radius: 0; }
 /* Dot sizes: an export checkbox, then the size to preview, its value and slider. */
 .size-row { display: flex; flex-direction: column; gap: 4px; }
 .size-choice { display: flex; align-items: center; gap: 6px; }
-/* A checkbox on the left of its label, as in Dot size; the label turns black when checked. */
-.check-option { display: flex; align-items: center; gap: 6px; min-height: 15px; color: var(--muted); text-transform: uppercase; cursor: pointer; transition: color 0.15s ease; }
-.check-option:hover { color: var(--hover); }
-.check-option:has(input:checked) { color: var(--ink); }
 input[type='checkbox'] { width: 10px; height: 10px; margin: 0; accent-color: var(--ink); cursor: pointer; }
 input[type='checkbox']:disabled { cursor: default; }
 
@@ -163,7 +153,7 @@ input[type='checkbox']:disabled { cursor: default; }
 .zoom-controls { display: flex; align-items: center; gap: 12px; }
 input.zoom-slider { flex: none; width: 100%; max-width: none; }
 #inspect[aria-pressed='true'] { color: var(--ink); }
-.legend-value #zoom-in, .legend-value #zoom-out { font-size: 12px; line-height: 1; }
+#zoom-in, #zoom-out { font-size: 12px; line-height: 1; }
 #zoom-level { min-width: 3.4em; text-align: center; font-variant-numeric: tabular-nums; }
 
 /* The loupe sits at the top of the right column, above the inks. */
@@ -171,7 +161,6 @@ input.zoom-slider { flex: none; width: 100%; max-width: none; }
 #loupe canvas { display: block; width: 100%; height: auto; background: #fff; }
 #loupe figcaption { margin: 0; color: var(--muted); font-size: 8px; text-transform: uppercase; line-height: 1.4; }
 .inspect-hint { margin: 0; color: var(--label); font-size: 8px; line-height: 1.5; }
-.panel-title { color: var(--label); font-size: 8px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 select { width: 100%; padding: 3px 0; border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; background: transparent; color: var(--ink); }
 
 /* ── Right column: inspect, inks, export ───────────────────────── */
@@ -201,6 +190,7 @@ select { width: 100%; padding: 3px 0; border: 0; border-bottom: 1px solid var(--
 body.chrome-hidden #sheet { inset: var(--edge); }
 #sheet[aria-busy='true'] { opacity: 0.35; }
 #preview {
+  position: relative; z-index: 0; /* above the bleed marks */
   max-width: 100%; max-height: 100%; width: auto; height: auto;
   background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 6px 16px rgba(0, 0, 0, 0.1), 0 24px 60px rgba(0, 0, 0, 0.16);
   cursor: grab; touch-action: none; user-select: none;
@@ -208,7 +198,6 @@ body.chrome-hidden #sheet { inset: var(--edge); }
 #preview:focus-visible { outline: 1px solid rgba(0, 0, 0, 0.25); outline-offset: -1px; }
 #preview[data-tool='inspect'] { cursor: none; }
 #bleed { position: absolute; pointer-events: none; z-index: 0; }
-#preview { position: relative; z-index: 0; }
 #sheet-grid, #sheet-grid-fine { position: absolute; pointer-events: none; z-index: 1; overflow: visible; }
 #sheet-grid path, #sheet-grid-fine path { fill: none; vector-effect: non-scaling-stroke; stroke-width: 1; }
 #sheet-grid-fine path { stroke: rgba(228, 87, 46, 0.3); stroke-width: 0.5; }

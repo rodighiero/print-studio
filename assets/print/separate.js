@@ -28,58 +28,22 @@ export function separate(img, p, view, simulate) {
   return [{
     name: 'ink',
     ink: hexToRgb(p.inks[0]),
-    data: simulate ? cov : screen(cov, p.angle, p, view),
+    data: simulate ? cov : screen(cov, view),
   }];
 }
 
 /* ---------- screening (coverage -> 0/255) ---------- */
 
-function screen(cov, angleDeg, p, view) {
+// Stochastic (FM) screen: a dispersed noise threshold in absolute sheet pixels,
+// so any crop matches the full render. Tiny marks survive; AM cells would break them apart.
+function screen(cov, view) {
   const { w, h } = view;
   const out = new Uint8Array(w * h);
-
-  if (p.screen === 'threshold') {
-    for (let i = 0; i < out.length; i++) out[i] = cov[i] > 127 ? 255 : 0;
-    return out;
-  }
-
-  if (p.screen === 'fs') {
-    // Stochastic (FM) screen: a dispersed noise threshold in absolute sheet
-    // pixels. Unlike error diffusion it does not depend on where a crop starts.
-    for (let y = 0; y < h; y++) {
-      const Y = y + view.y0;
-      for (let x = 0; x < w; x++) {
-        const i = y * w + x;
-        if (cov[i] > threshold(x + view.x0, Y)) out[i] = 255;
-      }
-    }
-    return out;
-  }
-
-  // AM screens, computed in absolute sheet pixels so crops match the full render
-  if (!(p.lpi > 0) || !Number.isFinite(angleDeg)) throw new Error(`Invalid screen: ${p.lpi} lpi at ${angleDeg}°`);
-  const period = view.dpi / p.lpi;
-  const a = (angleDeg * Math.PI) / 180;
-  const ca = Math.cos(a) / period, sa = Math.sin(a) / period;
-  const TAU = Math.PI * 2;
-  const lines = p.screen === 'lines';
   for (let y = 0; y < h; y++) {
-    const Y = y + view.y0 + 0.5;
+    const Y = y + view.y0;
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
-      const c = cov[i] / 255;
-      if (c <= 0) continue;
-      if (c >= 1) { out[i] = 255; continue; }
-      const X = x + view.x0 + 0.5;
-      const u = X * ca + Y * sa;
-      let s;
-      if (lines) {
-        s = Math.cos(TAU * u);
-      } else {
-        const v = -X * sa + Y * ca;
-        s = (Math.cos(TAU * u) + Math.cos(TAU * v)) / 2; // round dot -> checker -> inverted dot
-      }
-      if (s > 1 - 2 * c) out[i] = 255;
+      if (cov[i] > threshold(x + view.x0, Y)) out[i] = 255;
     }
   }
   return out;

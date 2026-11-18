@@ -40,21 +40,21 @@
             <a class="external" href="https://github.com/rodighiero/surprise-machines" target="_blank" rel="noopener">Source</a>
           </fieldset>
           <fieldset class="group"><legend>Dot size</legend>
-            <div class="size-row">
+            <div class="size-row" data-size="1">
               <div class="field">
                 <span class="size-choice"><input type="checkbox" checked disabled aria-label="Size 1 is always exported"><label class="radio-option"><input type="radio" name="sizePreview" value="1" checked><span>Size 1</span></label></span>
                 <output id="mark-size-1-level">100%</output>
               </div>
               <input class="zoom-slider" type="range" name="markSize" aria-label="Dot size 1" min="0.25" max="4" step="0.05" value="1">
             </div>
-            <div class="size-row">
+            <div class="size-row" data-size="2">
               <div class="field">
                 <span class="size-choice"><input type="checkbox" name="sizeOn2" aria-label="Export size 2"><label class="radio-option"><input type="radio" name="sizePreview" value="2"><span>Size 2</span></label></span>
                 <output id="mark-size-2-level">75%</output>
               </div>
               <input class="zoom-slider" type="range" name="markSize2" aria-label="Dot size 2" min="0.25" max="4" step="0.05" value="0.75" data-show="sizeOn2=true">
             </div>
-            <div class="size-row">
+            <div class="size-row" data-size="3">
               <div class="field">
                 <span class="size-choice"><input type="checkbox" name="sizeOn3" aria-label="Export size 3"><label class="radio-option"><input type="radio" name="sizePreview" value="3"><span>Size 3</span></label></span>
                 <output id="mark-size-3-level">150%</output>
@@ -69,8 +69,8 @@
         <fieldset class="panel-settings" disabled>
           <fieldset class="group"><legend>Format</legend>
             <div class="options inline">
-              <label class="radio-option"><input type="radio" name="sheet" value="420x594" checked><span>A2</span></label>
-              <label class="radio-option"><input type="radio" name="sheet" value="297x420"><span>A3</span></label>
+              <label class="radio-option"><input type="radio" name="sheet" value="420x594" data-name="A2" checked><span>A2</span></label>
+              <label class="radio-option"><input type="radio" name="sheet" value="297x420" data-name="A3"><span>A3</span></label>
             </div>
           </fieldset>
           <fieldset class="group"><legend class="legend-row">Zoom
@@ -147,9 +147,9 @@
           </fieldset>
           <fieldset class="group"><legend>Sheet</legend>
             <div class="options">
-              <label class="check-option" title="Extend each film 10 mm past the sheet, with registration targets and crop marks"><input type="checkbox" name="bleed" checked><span>Bleed 10 mm</span></label>
-              <label class="check-option" title="Show center and thirds guides on the sheet (G). Guides never print."><input type="checkbox" name="grid"><span>Grid</span></label>
-              <label class="check-option" title="Show thin guides every 50 mm from the sheet center. Guides never print."><input type="checkbox" name="gridFine"><span>Grid 50 mm</span></label>
+              <label class="check-option" title="Extend each film 10 mm past the sheet, with registration targets and crop marks"><input type="checkbox" name="bleed" data-overlay checked><span>Bleed 10 mm</span></label>
+              <label class="check-option" title="Show center and thirds guides on the sheet (G). Guides never print."><input type="checkbox" name="grid" data-overlay><span>Grid</span></label>
+              <label class="check-option" title="Show thin guides every 50 mm from the sheet center. Guides never print."><input type="checkbox" name="gridFine" data-overlay><span>Grid 50 mm</span></label>
             </div>
           </fieldset>
         </fieldset>

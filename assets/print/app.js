@@ -50,7 +50,6 @@ let inspectionPanelHover = false;
 let inspectionFrame = null;
 let selectedCentre = [...loupeCentre];
 let imageCentre; // layout centre of the image, set once the layout loads
-let restorePanelsHidden = false; // set by applySettings, applied once the page is ready
 let busy = false;
 let tool = 'move';
 let drag = null;
@@ -195,18 +194,21 @@ function applySettings(saved) {
       loupeCentre = [...inspect];
       selectedCentre = [...inspect];
     }
-    if (saved.panelsHidden === true) restorePanelsHidden = true;
   } catch {
     // Missing, outdated or unavailable storage must never prevent startup.
   }
 }
 
+// Returns the saved settings, so startup can restore state outside the form.
 function restoreSettings() {
   applySettings(projectSettings);
   try {
-    applySettings(JSON.parse(localStorage.getItem(SETTINGS_KEY)));
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+    applySettings(saved);
+    return saved;
   } catch {
     // Project defaults still work when local storage is unavailable or corrupt.
+    return null;
   }
 }
 
@@ -224,20 +226,27 @@ function initializeSpotPalettes() {
   saveSettings();
 }
 
-const percent = (value) => `${Math.round(Number(value) * 100)}%`;
+const pct = (value) => Math.round(Number(value) * 100);
+const percent = (value) => `${pct(value)}%`;
 // Dot sizes: size 1 is always exported; sizes 2 and 3 are optional extra sets.
-// The selected (bulleted) size is the one shown in the preview.
+// The selected (bulleted) size is the one shown in the preview. Each size's
+// controls sit in a row marked data-size="N".
+const SIZES = [1, 2, 3];
 const sizeName = (i) => (i === 1 ? 'markSize' : `markSize${i}`);
 const sizeRadio = (i) => form.querySelector(`input[name="sizePreview"][value="${i}"]`);
-const sizeValue = (i) => clampNum(parseFloat(form.elements[sizeName(i)].value), 0.25, 4, 1);
+const sizeValue = (i) => Number(form.elements[sizeName(i)].value); // a range input: always in bounds
 // Sizes to export; a size equal to an earlier one is skipped, since it would write the same files.
-const enabledSizes = () => [1, 2, 3]
-  .filter((i) => i === 1 || form.elements[`sizeOn${i}`].checked)
-  .filter((i, n, sizes) => sizes.findIndex((j) => Math.round(sizeValue(j) * 100) === Math.round(sizeValue(i) * 100)) === n);
+function enabledSizes() {
+  const seen = new Set();
+  return SIZES.filter((i) => i === 1 || form.elements[`sizeOn${i}`].checked).filter((i) => {
+    const key = pct(sizeValue(i));
+    return !seen.has(key) && seen.add(key);
+  });
+}
 // Export parameters for size i; with several sizes, files carry the dot size percentage.
 function sizedParams(p, i, sizes) {
   const markSize = sizeValue(i);
-  return { ...p, markSize, fileTag: sizes.length > 1 ? `dot-${Math.round(markSize * 100)}` : undefined };
+  return { ...p, markSize, fileTag: sizes.length > 1 ? `dot-${pct(markSize)}` : undefined };
 }
 // List the files the next export will write, below the Export button.
 const fileNames = document.getElementById('file-names');
@@ -250,8 +259,9 @@ function syncFileNames() {
   fileNames.hidden = false;
 }
 function syncSizes() {
-  for (const i of [1, 2, 3]) document.getElementById(`mark-size-${i}-level`).value = percent(form.elements[sizeName(i)].value);
-  for (const i of [2, 3]) {
+  for (const i of SIZES) {
+    document.getElementById(`mark-size-${i}-level`).value = percent(sizeValue(i));
+    if (i === 1) continue;
     const radio = sizeRadio(i);
     radio.disabled = !form.elements[`sizeOn${i}`].checked;
     if (radio.disabled && radio.checked) sizeRadio(1).checked = true;
@@ -259,12 +269,13 @@ function syncSizes() {
 }
 // Moving a slider or enabling a size previews it.
 function previewSize(target) {
-  const i = { markSize: 1, markSize2: 2, markSize3: 3, sizeOn2: 2, sizeOn3: 3 }[target.name];
-  if (i && !sizeRadio(i).disabled) sizeRadio(i).checked = true;
+  const row = target.closest('[data-size]');
+  const radio = row && sizeRadio(Number(row.dataset.size));
+  if (radio && !radio.disabled) radio.checked = true;
 }
 function syncZoom() {
   const zoom = form.elements.zoom;
-  zoomLevel.value = `${Math.round(Number(zoom.value) * 100)}%`;
+  zoomLevel.value = percent(zoom.value);
   document.getElementById('zoom-out').disabled = !ds || Number(zoom.value) <= Number(zoom.min);
   document.getElementById('zoom-in').disabled = !ds || Number(zoom.value) >= Number(zoom.max);
 }
@@ -329,8 +340,6 @@ function sheetPoint(event) {
 
 const status = (msg) => { statusEl.textContent = msg; };
 const previewStatus = (msg) => { if (!busy) status(msg); };
-// Empty or out-of-range typed values would blank (NaN) or flood (0) every screened film.
-const clampNum = (v, min, max, fallback) => (Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function readParams() {
@@ -341,13 +350,15 @@ function readParams() {
   const count = choice === 'spot2' ? 2 : 3;
   const spots = Array.from({ length: count }, (_, i) => el[`spot${count}Ink${i + 1}`].value);
   const inks = inkMode === 'spot' ? spots : [el.monoInk.value];
+  const sheet = form.querySelector('input[name="sheet"]:checked');
   return {
-    sheet: el.sheet.value.split('x').map(Number),
+    project: el.project.value,
+    sheet: sheet.value.split('x').map(Number),
+    sheetName: sheet.dataset.name,
     zoom: num('zoom'),
     offsetX: num('offsetX') || 0,
     offsetY: num('offsetY') || 0,
     layout: 'umap',
-    render: 'dots',
     referenceHeight,
     referencePixelRatio,
     centre: imageCentre,
@@ -358,22 +369,17 @@ function readParams() {
     inks,
     paper: el.paper.value,
     spotMethod: el.spotMethod.value,
-    // Tiny marks are screened stochastically: AM cells would break them apart.
-    screen: 'fs',
     dpi: EXPORT_DPI,
     bleed: el.bleed.checked,
   };
 }
 
-// data-show="inkMode=spot2,spot3" -> visible when every clause matches
+// data-show="inkMode=spot2,spot3" -> visible when the control has one of the values
 function updateVisibility() {
   form.querySelectorAll('[data-show]').forEach((node) => {
-    const ok = node.dataset.show.split(';').every((clause) => {
-      const [name, values] = clause.split('=');
-      const el = form.elements[name];
-      return values.split(',').includes(el.type === 'checkbox' ? String(el.checked) : el.value);
-    });
-    node.hidden = !ok;
+    const [name, values] = node.dataset.show.split('=');
+    const el = form.elements[name];
+    node.hidden = !values.split(',').includes(el.type === 'checkbox' ? String(el.checked) : el.value);
   });
 }
 
@@ -421,56 +427,66 @@ function drawPreview() {
   ctx.drawImage(previewSnapshot, 0, 0);
   const label = selectedView === 'composite' ? 'Composite of all inks' : `${filmLabel(selectedView)} film`;
   document.getElementById('sheet').setAttribute('aria-label', label);
-  drawGrid();
-  drawBleed();
-  drawLoupeOutline();
+  drawOverlays();
 }
 
-// The grid guides cover the sheet canvas exactly; they are overlays, so they never reach the films.
-// The two grids are independent and can be shown together.
-function drawGrid() {
+// Overlays (grids, bleed marks, inspection outline) sit over the sheet canvas inside #sheet.
+// They never reach the films. sheetBox() measures the canvas once per redraw.
+function sheetBox() {
   const rect = preview.getBoundingClientRect();
   const frame = preview.parentElement.getBoundingClientRect();
-  const place = (svg, on) => {
+  return { left: rect.left - frame.left, top: rect.top - frame.top, width: rect.width, height: rect.height };
+}
+// Place an element over a part of the sheet, in fractions of its size (outside 0..1 for the bleed).
+function placeOver(el, box, x = 0, y = 0, w = 1, h = 1) {
+  Object.assign(el.style, {
+    left: `${box.left + x * box.width}px`, top: `${box.top + y * box.height}px`,
+    width: `${w * box.width}px`, height: `${h * box.height}px`,
+  });
+}
+function drawOverlays() {
+  const box = sheetBox();
+  drawGrid(box);
+  drawBleed(box);
+  drawLoupeOutline(box);
+}
+
+// The two grids are independent and can be shown together.
+function drawGrid(box) {
+  for (const [svg, on] of [[sheetGrid, form.elements.grid.checked], [sheetGridFine, form.elements.gridFine.checked]]) {
     // An SVG element has no .hidden property; toggle the attribute instead.
     svg.toggleAttribute('hidden', !last || !on);
-    if (!last || !on) return false;
-    Object.assign(svg.style, {
-      left: `${rect.left - frame.left}px`, top: `${rect.top - frame.top}px`,
-      width: `${rect.width}px`, height: `${rect.height}px`,
-    });
-    return true;
-  };
-  place(sheetGrid, form.elements.grid.checked);
-  if (place(sheetGridFine, form.elements.gridFine.checked)) {
-    // Drawn in sheet millimetres, from the centre outwards.
-    const [W, H] = readParams().sheet;
-    const lines = (length, step) => {
-      const out = [];
-      for (let d = 0; length / 2 + d < length; d += step) out.push(length / 2 + d, ...(d ? [length / 2 - d] : []));
-      return out;
-    };
-    const d = [
-      ...lines(W, FINE_GRID_MM).map((x) => `M${x} 0V${H}`),
-      ...lines(H, FINE_GRID_MM).map((y) => `M0 ${y}H${W}`),
-    ].join('');
-    sheetGridFine.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    sheetGridFine.firstElementChild.setAttribute('d', d);
+    if (last && on) placeOver(svg, box);
   }
+  if (!last || !form.elements.gridFine.checked) return;
+  // The fine grid is drawn in sheet millimetres, from the centre outwards; it changes only with the format.
+  const [W, H] = last.p.sheet;
+  const viewBox = `0 0 ${W} ${H}`;
+  if (sheetGridFine.getAttribute('viewBox') === viewBox) return;
+  const lines = (length) => {
+    const out = [];
+    for (let d = 0; length / 2 + d < length; d += FINE_GRID_MM) out.push(length / 2 + d, ...(d ? [length / 2 - d] : []));
+    return out;
+  };
+  sheetGridFine.setAttribute('viewBox', viewBox);
+  sheetGridFine.firstElementChild.setAttribute('d', [
+    ...lines(W).map((x) => `M${x} 0V${H}`),
+    ...lines(H).map((y) => `M0 ${y}H${W}`),
+  ].join(''));
 }
 
 // Show the film bleed around the sheet: the same marks as the films, drawn at
 // screen resolution behind the sheet canvas, which covers everything but the band.
+// Only the marks are drawn; the band itself stays the page background.
+const MARK_PIXEL = new Uint32Array(new Uint8ClampedArray([30, 30, 30, 230]).buffer)[0];
 let bleedKey = '';
-function drawBleed() {
-  const p = last && readParams();
-  bleedCanvas.hidden = !p || !p.bleed;
-  if (bleedCanvas.hidden) return;
-  const rect = preview.getBoundingClientRect();
-  const frame = preview.parentElement.getBoundingClientRect();
-  const cssPerMm = rect.width / p.sheet[0];
-  const view = filmView(p, cssPerMm * 25.4 * (window.devicePixelRatio || 1));
-  // Redraw the marks only when the band's pixel size changes (format, window size, zoom level of the page).
+function drawBleed(box) {
+  const on = last && form.elements.bleed.checked;
+  bleedCanvas.hidden = !on;
+  if (!on) return;
+  const p = { ...last.p, bleed: true };
+  const view = filmView(p, box.width / p.sheet[0] * 25.4 * (window.devicePixelRatio || 1));
+  // Redraw the marks only when the band's pixel size changes (format, window size, page zoom).
   const key = `${view.w}x${view.h}`;
   if (key !== bleedKey) {
     bleedKey = key;
@@ -479,33 +495,21 @@ function drawBleed() {
     bleedCanvas.width = view.w;
     bleedCanvas.height = view.h;
     const image = new ImageData(view.w, view.h);
-    for (let i = 0, o = 0; i < marks.data.length; i++, o += 4) {
-      // Only the marks: the band itself stays the page background.
-      if (marks.data[i]) image.data.set([30, 30, 30, 230], o);
-    }
+    const pixels = new Uint32Array(image.data.buffer);
+    for (let i = 0; i < marks.data.length; i++) if (marks.data[i]) pixels[i] = MARK_PIXEL;
     bleedCanvas.getContext('2d').putImageData(image, 0, 0);
   }
-  const scale = rect.width / view.trim.w;
-  Object.assign(bleedCanvas.style, {
-    left: `${rect.left - frame.left + view.x0 * scale}px`, top: `${rect.top - frame.top + view.y0 * scale}px`,
-    width: `${view.w * scale}px`, height: `${view.h * scale}px`,
-  });
+  const { w, h } = view.trim;
+  placeOver(bleedCanvas, box, view.x0 / w, view.y0 / h, view.w / w, view.h / h);
 }
 
-function drawLoupeOutline() {
+function drawLoupeOutline(box) {
   inspectionArea.hidden = !last || (!inspectionPanelHover && (tool !== 'inspect' || !inspectionPointer));
   if (inspectionArea.hidden) return;
   const p = readParams();
   const view = inspectionView(p, loupeCentre, loupeSize(p));
   const sheet = fullView(p, p.dpi);
-  const rect = preview.getBoundingClientRect();
-  const frame = preview.parentElement.getBoundingClientRect();
-  Object.assign(inspectionArea.style, {
-    left: `${rect.left - frame.left + view.x0 / sheet.w * rect.width}px`,
-    top: `${rect.top - frame.top + view.y0 / sheet.h * rect.height}px`,
-    width: `${view.w / sheet.w * rect.width}px`,
-    height: `${view.h / sheet.h * rect.height}px`,
-  });
+  placeOver(inspectionArea, box ?? sheetBox(), view.x0 / sheet.w, view.y0 / sheet.h, view.w / sheet.w, view.h / sheet.h);
 }
 
 async function update() {
@@ -526,8 +530,13 @@ async function update() {
   drawPreview();
   if (loupeCentre) await renderLoupe();
   if (request !== revision) return;
-  const exportPx = filmView(p, p.dpi);
-  previewStatus(`${exportPx.w} × ${exportPx.h} px`);
+  syncFilmSize();
+}
+// The film size below the Export button.
+function syncFilmSize() {
+  const p = readParams();
+  const film = filmView(p, p.dpi);
+  previewStatus(`${film.w} × ${film.h} px`);
 }
 
 let loupeRevision = 0;
@@ -634,7 +643,13 @@ window.addEventListener('pagehide', saveSettings);
 
 form.addEventListener('input', (e) => {
   if (e.target.name === 'previewFilm') return;
-  if (e.target.name === 'grid' || e.target.name === 'gridFine') { drawGrid(); saveSettings(); return; }
+  // Grids and bleed change only overlays and the film size, not the rendered preview.
+  if ('overlay' in e.target.dataset) {
+    drawOverlays();
+    if (last) syncFilmSize();
+    saveSettings();
+    return;
+  }
   updateVisibility();
   syncZoom();
   syncSizes();
@@ -693,11 +708,14 @@ preview.addEventListener('pointerleave', () => {
   drawLoupeOutline();
 });
 // A wider or narrower loupe covers more or less of the sheet, still at actual size.
+let resizeFrame = null;
 window.addEventListener('resize', () => {
-  drawGrid();
-  drawBleed();
-  drawLoupeOutline();
-  if (loupeCentre && last && loupeCanvas.width !== loupeSize(readParams())) renderLoupe();
+  if (resizeFrame !== null) return;
+  resizeFrame = requestAnimationFrame(() => {
+    resizeFrame = null;
+    drawOverlays();
+    if (loupeCentre && last && loupeCanvas.width !== loupeSize(readParams())) renderLoupe();
+  });
 });
 function endDrag(pointerId) {
   if (!drag || pointerId !== drag.id) return;
@@ -746,9 +764,7 @@ function toggleChrome() {
   const hidden = document.body.classList.toggle('chrome-hidden');
   if (hidden) inspectionPanelHover = false;
   chromeToggle.textContent = hidden ? 'Show panels' : 'Hide panels';
-  drawGrid();
-  drawBleed();
-  drawLoupeOutline();
+  drawOverlays();
   saveSettings();
 }
 chromeToggle.addEventListener('click', toggleChrome);
@@ -756,10 +772,8 @@ document.addEventListener('keydown', (event) => {
   const key = event.key.toLowerCase();
   if (!['h', 'g'].includes(key) || event.metaKey || event.ctrlKey || event.altKey) return;
   if (event.target.closest?.('input:not([type=radio]), textarea, select')) return;
-  if (key === 'h') { toggleChrome(); return; }
-  form.elements.grid.checked = !form.elements.grid.checked;
-  drawGrid();
-  saveSettings();
+  if (key === 'h') toggleChrome();
+  else form.elements.grid.click(); // same path as clicking the checkbox
 });
 
 let exportId = 0;
@@ -807,8 +821,7 @@ exportBtn.addEventListener('click', async () => {
   }
 });
 
-restoreSettings();
-if (restorePanelsHidden) toggleChrome();
+if (restoreSettings()?.panelsHidden === true) toggleChrome();
 syncPosition();
 updateVisibility();
 syncZoom();
@@ -819,12 +832,12 @@ loadDataset(status)
     ds = data;
     initializeSpotPalettes();
     const positions = await ds.layout('umap');
-    imageCentre = layoutCentre(positions);
     const { n, meanCellArea, pointSizes, css, lum } = ds;
     const init = { type: 'init', dataset: { n, meanCellArea, pointSizes, css, lum }, positions };
     previewWorker.init(init);
     exportWorker.init(init);
     inspectionWorker.init(init);
+    imageCentre = layoutCentre(positions); // while the workers load the dataset
     await update();
     form.querySelectorAll('.panel-settings').forEach((settings) => { settings.disabled = false; });
     inspectButton.disabled = false;

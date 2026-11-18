@@ -16,7 +16,7 @@ const ds = {
 const base = {
   sheet: [420, 594], zoom: 1, offsetX: 0, offsetY: 0,
   referenceHeight: 949, referencePixelRatio: 2,
-  colorBy: 'image', sizeBy: 'constant', render: 'dots',
+  colorBy: 'image', sizeBy: 'constant',
 };
 
 function draw(t, p, dpi = 300, crop = 0) {
@@ -133,7 +133,7 @@ test('panel and committed defaults contain only automatic dots', () => {
   assert.ok(!html.includes('value="thumbs"'));
   assert.ok(!html.includes('value="squares"'));
   assert.ok(!html.includes('name="render"'));
-  assert.equal(settings.values.render, 'dots');
+  assert.ok(!('render' in settings.values)); // dots are the only rendering
   assert.ok(!html.includes('name="size"'));
   assert.ok(!('size' in settings.values));
   assert.ok(!html.includes('<legend>Dot area</legend>'));

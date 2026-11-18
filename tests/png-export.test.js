@@ -44,7 +44,7 @@ test('film export propagates asynchronous save failures before encoding more fil
   await assert.rejects(renderFilms({ n: 0, meanCellArea: 1, pointSizes: { scatter: 0.001 } }, [], {
     sheet: [420, 594], dpi: 300, zoom: 1, offsetX: 0, offsetY: 0,
     referenceHeight: 900, referencePixelRatio: 1, inkMode: 'mono',
-    inks: ['#000000'], screen: 'threshold', render: 'dots', paper: '#ffffff',
+    inks: ['#000000'], paper: '#ffffff',
   }, { dpi: 300, x0: 0, y0: 0, w: 1, h: 1 }, {
     progress() {}, async file() { saves++; throw new Error('Disk full'); },
   }), /Disk full/);

@@ -44,10 +44,9 @@ function chunk(type, data) {
 
 // Exact PNG encoder (canvas encoding can shift some 0/255 pixels by one level,
 // which puts gray pixels on films). `pixels` holds one grayscale byte per pixel.
-export async function encodePng(pixels, width, height, dpi) {
-  const stride = width;
-  const raw = new Uint8Array(height * (stride + 1)); // filter byte 0 per row
-  for (let y = 0; y < height; y++) raw.set(pixels.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
+async function encodePng(pixels, width, height, dpi) {
+  const raw = new Uint8Array(height * (width + 1)); // filter byte 0 per row
+  for (let y = 0; y < height; y++) raw.set(pixels.subarray(y * width, (y + 1) * width), y * (width + 1) + 1);
   const zlib = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
   const ihdr = new Uint8Array(13);
   const dv = new DataView(ihdr.buffer);
@@ -77,17 +76,13 @@ export function download(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
-// Sheet format for file names: A2 or A3, else the size in millimetres.
-const SHEET_NAMES = { '420x594': 'A2', '297x420': 'A3' };
-const sheetName = ([w, h]) => SHEET_NAMES[`${w}x${h}`] ?? `${w}x${h}mm`;
-
-// One PNG per ink layer; `p.fileTag` marks the dot size when several are exported.
+// One PNG per ink layer: project, sheet format (A2…), and for spot sets the ink
+// count and each ink's number and color; a one-color set is a single film.
+// `p.fileTag` marks the dot size when several are exported.
 export function filmFileName(p, layer, index) {
-  // Spot sets name their ink count; a one-color set needs none.
-  const inks = p.inks.length > 1 ? `_${p.inks.length}inks` : '';
-  const base = `surprise-machines_${sheetName(p.sheet)}${inks}${p.fileTag ? `_${p.fileTag}` : ''}`;
-  // A one-color set is a single film, so it needs no ink suffix.
-  return p.inks.length > 1 ? `${base}_ink-${index + 1}-${layer.hex}.png` : `${base}.png`;
+  const spot = p.inks.length > 1;
+  const base = [p.project, p.sheetName, spot && `${p.inks.length}inks`, p.fileTag].filter(Boolean).join('_');
+  return spot ? `${base}_ink-${index + 1}-${layer.hex}.png` : `${base}.png`;
 }
 
 // Full-resolution films, with registration marks when they have a bleed.
